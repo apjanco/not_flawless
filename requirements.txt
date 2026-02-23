@@ -1,0 +1,27 @@
+numpy
+pandas
+matplotlib
+opencv-python
+pillow
+scipy
+
+# OCR/HTR Models
+pytesseract
+laia-ocr
+kraken
+transformers
+huggingface-hub
+
+# Deep Learning
+torch
+torchvision
+
+# API Clients
+requests
+google-cloud-vision
+
+# Utilities
+tqdm
+pyyaml
+
+

@@ -1,0 +1,30 @@
+# HPC Job Configuration for Adroit
+
+# SLURM Parameters
+JOB_NAME=ocr_evaluation
+TIME=04:00:00
+NTASKS=1
+CPUS_PER_TASK=8
+MEM=32G
+GPUS=1
+EMAIL=your_email@princeton.edu
+
+# Python/Environment
+PYTHON_VERSION=3.10
+CONDA_ENV=ocr_eval
+
+# Models to evaluate
+MODELS=(
+    tesseract
+    paddleocr
+    easyocr
+)
+
+# Data split
+DATA_SPLIT=test
+
+# Number of samples to evaluate (0 for all)
+NUM_SAMPLES=0
+
+# Verbose output
+VERBOSE=1

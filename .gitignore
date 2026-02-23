@@ -1,0 +1,48 @@
+# .gitignore
+
+# Data
+data/iam/
+data/other_datasets/
+data/processed/
+
+# Models
+models/*/
+
+# Results
+results/logs/
+results/metrics/
+results/visualizations/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# HPC
+*.log
+*.err
+.env
+.env.local
