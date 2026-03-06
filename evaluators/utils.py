@@ -8,9 +8,11 @@ import sys
 import json
 import csv
 from pathlib import Path
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
 import numpy as np
+from torchmetrics.text import CharErrorRate, WordErrorRate
+from datasets import load_dataset
 
 def get_project_root() -> Path:
     """Get project root directory"""
@@ -26,88 +28,50 @@ def get_results_dir() -> Path:
     results_dir.mkdir(parents=True, exist_ok=True)
     return results_dir
 
-def load_iam_data(split: str = "test", limit: int = None) -> Tuple[List[str], List[str]]:
+def load_iam_data(split: str = "test", limit: int = None):
     """
-    Load IAM database from Teklia/IAM-line Hugging Face dataset
+    Load IAM database using Hugging Face Datasets from Teklia/IAM-line
     
     Args:
-        split: Data split (train/val/test)
+        split: Data split (train/validation/test) or None to load all splits combined
         limit: Maximum number of samples to load (None = all)
     
     Returns:
-        Tuple of (image_paths, ground_truth_labels)
+        Hugging Face Dataset object
     """
-    data_dir = get_data_dir() / "iam"
-    
-    if not data_dir.exists():
-        raise FileNotFoundError(f"IAM data directory not found: {data_dir}")
-    
-    image_paths = []
-    labels = []
-    
-    # Load from splits directory structure
-    # Expected structure: data/iam/splits/[train|val|test]/
-    split_dir = data_dir / "splits" / split
-    
-    if not split_dir.exists():
-        # Try alternative structure: data/iam/[split]/
-        split_dir = data_dir / split
-    
-    if not split_dir.exists():
-        raise FileNotFoundError(f"IAM split directory not found: {split_dir}")
-    
-    # Look for images and metadata
-    # Teklia/IAM-line typically has: images + metadata JSON
-    image_extensions = {'.png', '.jpg', '.jpeg', '.tif'}
-    
-    # Collect all image files
-    image_files = sorted([
-        f for f in split_dir.rglob('*')
-        if f.is_file() and f.suffix.lower() in image_extensions
-    ])
-    
-    # Load corresponding labels
-    # Try to load from a metadata file first
-    metadata_file = split_dir.parent / f"{split}_metadata.json"
-    metadata = {}
-    
-    if metadata_file.exists():
-        try:
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-        except Exception as e:
-            log_warning("load_iam_data", f"Could not load metadata: {str(e)}")
-    
-    # Process images
-    for img_path in image_files:
-        # Try to get label from metadata
-        img_key = img_path.stem
-        label = metadata.get(img_key, "") or metadata.get(str(img_path), "")
+    try:
+        log_info("load_iam_data", f"Loading IAM dataset split: {split}")
         
-        # If no metadata label, try to load from .txt file with same name
-        if not label:
-            txt_path = img_path.with_suffix('.txt')
-            if txt_path.exists():
-                try:
-                    with open(txt_path, 'r', encoding='utf-8') as f:
-                        label = f.read().strip()
-                except Exception:
-                    label = ""
+        if split is None:
+            # Load all splits and combine them
+            train = load_dataset("Teklia/IAM-line", split="train", trust_remote_code=True)
+            validation = load_dataset("Teklia/IAM-line", split="validation", trust_remote_code=True)
+            test = load_dataset("Teklia/IAM-line", split="test", trust_remote_code=True)
+            
+            from datasets import concatenate_datasets
+            dataset = concatenate_datasets([train, validation, test])
+            log_info("load_iam_data", f"Combined all splits: {len(dataset)} total samples")
+        else:
+            dataset = load_dataset("Teklia/IAM-line", split=split, trust_remote_code=True)
         
-        image_paths.append(str(img_path))
-        labels.append(label)
+        if limit:
+            dataset = dataset.select(range(min(limit, len(dataset))))
+            log_info("load_iam_data", f"Limited to {len(dataset)} samples")
         
-        if limit and len(image_paths) >= limit:
-            break
-    
-    if not image_paths:
-        log_warning("load_iam_data", f"No images found in {split_dir}")
-    
-    return image_paths, labels
+        log_info("load_iam_data", f"Loaded {len(dataset)} samples")
+        return dataset
+        
+    except Exception as e:
+        log_error("load_iam_data", f"Failed to load dataset: {str(e)}")
+        raise
+
+# Initialize torchmetrics CER and WER calculators
+_cer_metric = CharErrorRate()
+_wer_metric = WordErrorRate()
 
 def character_error_rate(reference: str, hypothesis: str) -> float:
     """
-    Calculate Character Error Rate (CER)
+    Calculate Character Error Rate (CER) using torchmetrics
     
     Args:
         reference: Ground truth text
@@ -119,13 +83,13 @@ def character_error_rate(reference: str, hypothesis: str) -> float:
     if len(reference) == 0:
         return 100.0 if len(hypothesis) > 0 else 0.0
     
-    # Simple implementation using edit distance
-    errors = _levenshtein_distance(reference, hypothesis)
-    return (errors / len(reference)) * 100
+    # torchmetrics returns CER as a fraction (0-1), convert to percentage
+    cer = _cer_metric([hypothesis], [reference])
+    return float(cer.item() * 100)
 
 def word_error_rate(reference: str, hypothesis: str) -> float:
     """
-    Calculate Word Error Rate (WER)
+    Calculate Word Error Rate (WER) using torchmetrics
     
     Args:
         reference: Ground truth text
@@ -135,35 +99,13 @@ def word_error_rate(reference: str, hypothesis: str) -> float:
         WER as percentage (0-100)
     """
     ref_words = reference.split()
-    hyp_words = hypothesis.split()
     
     if len(ref_words) == 0:
-        return 100.0 if len(hyp_words) > 0 else 0.0
+        return 100.0 if len(hypothesis.split()) > 0 else 0.0
     
-    errors = _levenshtein_distance(ref_words, hyp_words)
-    return (errors / len(ref_words)) * 100
-
-def _levenshtein_distance(s1: List[str], s2: List[str]) -> int:
-    """
-    Calculate Levenshtein distance between two sequences
-    """
-    if len(s1) < len(s2):
-        return _levenshtein_distance(s2, s1)
-    
-    if len(s2) == 0:
-        return len(s1)
-    
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-    
-    return previous_row[-1]
+    # torchmetrics returns WER as a fraction (0-1), convert to percentage
+    wer = _wer_metric([hypothesis], [reference])
+    return float(wer.item() * 100)
 
 def save_metrics(model_name: str, metrics: Dict[str, Any]) -> Path:
     """

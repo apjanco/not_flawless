@@ -11,14 +11,17 @@ laia-ocr
 kraken
 transformers
 huggingface-hub
+datasets
 
 # Deep Learning
 torch
 torchvision
+torchmetrics
 
 # API Clients
 requests
 google-cloud-vision
+google-genai  # For Gemini with logprobs via Vertex AI
 
 # Utilities
 tqdm

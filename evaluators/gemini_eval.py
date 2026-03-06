@@ -1,20 +1,23 @@
 """
 evaluators/gemini_eval.py
-Google Gemini (via Portkey) OCR evaluator
+Google Gemini (via Vertex AI) OCR evaluator with logprobs support
 """
 
 import time
 import os
+import math
 from pathlib import Path
-from typing import Dict, Any, List
-import base64
+from typing import Dict, Any, List, Optional
+from PIL import Image
 
 try:
-    import requests
+    from google import genai
+    from google.genai.types import GenerateContentConfig
+    GENAI_AVAILABLE = True
 except ImportError:
-    requests = None
+    GENAI_AVAILABLE = False
 
-from evaluators.utils import (
+from .utils import (
     get_data_dir, get_results_dir, load_iam_data,
     character_error_rate, word_error_rate,
     save_metrics, append_metrics_csv, save_results_jsonl,
@@ -22,24 +25,29 @@ from evaluators.utils import (
 )
 
 MODEL_NAME = "gemini-vision"
+MODEL_ID = "gemini-2.5-flash"  # or "gemini-2.0-flash"
 
 def check_dependencies():
     """Check if required packages are installed"""
-    return requests is not None
+    return GENAI_AVAILABLE
 
-def get_portkey_key():
-    """Get Portkey API key from environment"""
-    api_key = os.getenv("PORTKEY_API_KEY")
-    if not api_key:
-        log_warning(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
-    return api_key
+def get_gcp_config():
+    """Get GCP project configuration from environment"""
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
+    location = os.getenv("GCP_LOCATION", "global")
+    
+    if not project_id:
+        log_warning(MODEL_NAME, "GOOGLE_CLOUD_PROJECT environment variable not set")
+    
+    return project_id, location
 
-def evaluate(project_root: str = None) -> Dict[str, Any]:
+def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     """
     Main evaluation function
     
     Args:
         project_root: Path to project root
+        top_logprobs: Number of top alternative tokens to return (1-20)
     
     Returns:
         Dictionary of evaluation metrics
@@ -48,29 +56,37 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     
     # Check dependencies
     if not check_dependencies():
-        log_error(MODEL_NAME, "requests library not installed")
-        return {"error": "requests not available"}
+        log_error(MODEL_NAME, "google-genai library not installed. Run: pip install google-genai")
+        return {"error": "google-genai not available"}
     
-    # Check API key
-    api_key = get_portkey_key()
-    if not api_key:
-        log_error(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
-        return {"error": "API key not configured"}
+    # Check GCP config
+    project_id, location = get_gcp_config()
+    if not project_id:
+        log_error(MODEL_NAME, "GOOGLE_CLOUD_PROJECT environment variable not set")
+        return {"error": "GCP project not configured"}
+    
+    # Initialize client
+    try:
+        client = genai.Client(vertexai=True, project=project_id, location=location)
+        log_info(MODEL_NAME, f"Initialized Vertex AI client for project: {project_id}")
+    except Exception as e:
+        log_error(MODEL_NAME, f"Failed to initialize Vertex AI client: {str(e)}")
+        return {"error": str(e)}
     
     # Load test data
     try:
-        test_images, test_labels = load_iam_data(split="test")
-        log_info(MODEL_NAME, f"Loaded {len(test_images)} test images")
+        dataset = load_iam_data(split="test")
+        log_info(MODEL_NAME, f"Loaded {len(dataset)} test samples")
     except Exception as e:
         log_error(MODEL_NAME, f"Failed to load test data: {str(e)}")
         return {"error": str(e)}
     
-    if not test_images:
-        log_warning(MODEL_NAME, "No test images found")
+    if not dataset or len(dataset) == 0:
+        log_warning(MODEL_NAME, "No test data found")
         return {"error": "No test data"}
     
     # Run evaluation
-    metrics = _run_evaluation(api_key, test_images, test_labels)
+    metrics = _run_evaluation(client, dataset, top_logprobs)
     
     # Save results
     save_metrics(MODEL_NAME, metrics)
@@ -79,19 +95,14 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _encode_image(image_path: str) -> str:
-    """Encode image to base64 for API"""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
-
-def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[str]) -> Dict[str, Any]:
+def _run_evaluation(client, dataset, top_logprobs: int = 5) -> Dict[str, Any]:
     """
-    Run evaluation on test set
+    Run evaluation on test set with logprobs
     
     Args:
-        api_key: Portkey API key
-        image_paths: List of image file paths
-        ground_truths: List of ground truth text
+        client: Google GenAI client
+        dataset: HuggingFace dataset with 'image' and 'text' fields
+        top_logprobs: Number of top alternative tokens to return
     
     Returns:
         Dictionary of metrics
@@ -102,64 +113,62 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
     inference_times = []
     num_errors = 0
     
-    headers = {
-        "x-portkey-api-key": api_key,
-        "Content-Type": "application/json"
-    }
+    # Configure generation with logprobs
+    generation_config = GenerateContentConfig(
+        max_output_tokens=1024,
+        response_logprobs=True,
+        logprobs=top_logprobs,  # Get top N alternative tokens
+    )
     
-    for idx, (image_path, ground_truth) in enumerate(zip(image_paths, ground_truths)):
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    
+    for idx, example in enumerate(dataset):
         result = {
-            "image_path": image_path,
-            "ground_truth": ground_truth,
+            "index": idx,
+            "ground_truth": example.get('text', ''),
             "predicted_text": None,
             "cer": None,
             "wer": None,
             "inference_time": None,
+            "logprobs": None,
+            "mean_logprob": None,
+            "confidence": None,
             "error": None
         }
         
+        ground_truth = example.get('text', '')
+        
         try:
-            # Encode image
-            image_data = _encode_image(image_path)
+            # Get PIL image from dataset
+            pil_image = example['image']
             
-            # Prepare request
-            payload = {
-                "model": "gemini-2.0-flash-vision",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Please read and transcribe all text in this image. Return only the transcribed text."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_data}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 1024
-            }
+            # Prepare content with image and prompt
+            contents = [pil_image, prompt]
             
-            # Call API via Portkey
+            # Call Gemini API with logprobs
             start_time = time.time()
-            response = requests.post(
-                "https://api.portkey.ai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
+            response = client.models.generate_content(
+                model=MODEL_ID,
+                contents=contents,
+                config=generation_config,
             )
             inference_time = time.time() - start_time
             
-            if response.status_code != 200:
-                raise Exception(f"API error: {response.status_code} - {response.text}")
+            # Extract text response
+            predicted_text = response.text.strip() if response.text else ""
             
-            response_data = response.json()
-            predicted_text = response_data["choices"][0]["message"]["content"].strip()
+            # Extract logprobs
+            logprobs_data = _extract_logprobs(response)
+            
+            # Calculate mean logprob and confidence
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    # Convert mean logprob to confidence percentage
+                    confidence = math.exp(mean_logprob) * 100
             
             # Calculate metrics
             cer = character_error_rate(ground_truth, predicted_text)
@@ -169,16 +178,19 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
             result["cer"] = cer
             result["wer"] = wer
             result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
             
             cer_values.append(cer)
             wer_values.append(wer)
             inference_times.append(inference_time)
             
             if (idx + 1) % 10 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(image_paths)} images")
+                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(dataset)} samples")
         
         except Exception as e:
-            log_warning(MODEL_NAME, f"Error processing image {image_path}: {str(e)}")
+            log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
             result["error"] = str(e)
             num_errors += 1
         
@@ -189,14 +201,16 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
     
     # Calculate aggregated metrics
     metrics = {
-        "num_samples": len(image_paths),
-        "num_successful": len(image_paths) - num_errors,
+        "num_samples": len(dataset),
+        "num_successful": len(dataset) - num_errors,
         "num_errors": num_errors,
     }
     
     if cer_values:
         metrics["mean_cer"] = sum(cer_values) / len(cer_values)
         metrics["median_cer"] = sorted(cer_values)[len(cer_values) // 2]
+        metrics["min_cer"] = min(cer_values)
+        metrics["max_cer"] = max(cer_values)
     else:
         metrics["mean_cer"] = None
         metrics["median_cer"] = None
@@ -204,6 +218,8 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
     if wer_values:
         metrics["mean_wer"] = sum(wer_values) / len(wer_values)
         metrics["median_wer"] = sorted(wer_values)[len(wer_values) // 2]
+        metrics["min_wer"] = min(wer_values)
+        metrics["max_wer"] = max(wer_values)
     else:
         metrics["mean_wer"] = None
         metrics["median_wer"] = None
@@ -216,6 +232,49 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
         metrics["total_inference_time"] = None
     
     return metrics
+
+def _extract_logprobs(response) -> Optional[List[Dict[str, Any]]]:
+    """
+    Extract logprobs from Gemini response
+    
+    Args:
+        response: Gemini API response
+    
+    Returns:
+        List of token logprob data with top alternatives
+    """
+    try:
+        if not response.candidates or not response.candidates[0].logprobs_result:
+            return None
+        
+        logprobs_result = response.candidates[0].logprobs_result
+        logprobs_data = []
+        
+        for i, chosen_candidate in enumerate(logprobs_result.chosen_candidates):
+            token_entry = {
+                "token": chosen_candidate.token,
+                "logprob": chosen_candidate.log_probability,
+                "prob": math.exp(chosen_candidate.log_probability) if chosen_candidate.log_probability else None,
+                "top_tokens": []
+            }
+            
+            # Extract top alternative tokens
+            if i < len(logprobs_result.top_candidates):
+                top_alternatives = logprobs_result.top_candidates[i].candidates
+                for alt_token_info in top_alternatives:
+                    token_entry["top_tokens"].append({
+                        "token": alt_token_info.token,
+                        "logprob": alt_token_info.log_probability,
+                        "prob": math.exp(alt_token_info.log_probability) if alt_token_info.log_probability else None
+                    })
+            
+            logprobs_data.append(token_entry)
+        
+        return logprobs_data
+    
+    except Exception as e:
+        log_warning(MODEL_NAME, f"Failed to extract logprobs: {str(e)}")
+        return None
 
 if __name__ == "__main__":
     # Allow running evaluator directly

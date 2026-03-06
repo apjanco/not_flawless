@@ -3,7 +3,7 @@ evaluators/__init__.py
 Evaluators package
 """
 
-from evaluators import (
+from . import (
     tesseract_eval,
     paddleocr_eval,
     easyocr_eval,
