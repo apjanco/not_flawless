@@ -27,4 +27,6 @@ google-genai  # For Gemini with logprobs via Vertex AI
 tqdm
 pyyaml
 
+# image processing
+augraphy
 
