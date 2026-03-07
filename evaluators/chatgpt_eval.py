@@ -5,6 +5,7 @@ ChatGPT (via OpenAI API) OCR evaluator
 
 import time
 import os
+import math
 from pathlib import Path
 from typing import Dict, Any, List
 import base64
@@ -115,6 +116,7 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
             "cer": None,
             "wer": None,
             "inference_time": None,
+            "logprobs": None,
             "error": None
         }
         
@@ -122,7 +124,7 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
             # Encode image
             image_data = _encode_image(image_path)
             
-            # Prepare request
+            # Prepare request with logprobs enabled
             payload = {
                 "model": "gpt-4-vision",
                 "messages": [
@@ -142,7 +144,9 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
                         ]
                     }
                 ],
-                "max_tokens": 1024
+                "max_tokens": 1024,
+                "logprobs": True,
+                "top_logprobs": 5  # Get top 5 token predictions per position
             }
             
             # Call API via Portkey
@@ -161,6 +165,32 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
             response_data = response.json()
             predicted_text = response_data["choices"][0]["message"]["content"].strip()
             
+            # Extract logprobs if available
+            # Structure: list of {token, logprob, top_logprobs: [{token, logprob}, ...]}
+            logprobs_data = None
+            if "logprobs" in response_data["choices"][0]:
+                raw_logprobs = response_data["choices"][0]["logprobs"]
+                if raw_logprobs and "content" in raw_logprobs:
+                    logprobs_data = []
+                    for token_info in raw_logprobs["content"]:
+                        chosen_logprob = token_info.get("logprob", 0)
+                        token_entry = {
+                            "token": token_info.get("token", ""),
+                            "logprob": chosen_logprob,
+                            "prob": math.exp(chosen_logprob) if chosen_logprob is not None else None,
+                            "top_tokens": []
+                        }
+                        # Extract top token predictions with probabilities
+                        if "top_logprobs" in token_info:
+                            for top in token_info["top_logprobs"]:
+                                top_logprob = top.get("logprob", 0)
+                                token_entry["top_tokens"].append({
+                                    "token": top.get("token", ""),
+                                    "logprob": top_logprob,
+                                    "prob": math.exp(top_logprob) if top_logprob is not None else None
+                                })
+                        logprobs_data.append(token_entry)
+            
             # Calculate metrics
             cer = character_error_rate(ground_truth, predicted_text)
             wer = word_error_rate(ground_truth, predicted_text)
@@ -169,6 +199,7 @@ def _run_evaluation(api_key: str, image_paths: List[str], ground_truths: List[st
             result["cer"] = cer
             result["wer"] = wer
             result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
             
             cer_values.append(cer)
             wer_values.append(wer)
