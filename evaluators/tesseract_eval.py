@@ -7,6 +7,7 @@ import time
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
+from datasets import load_from_disk
 
 try:
     import pytesseract
@@ -56,8 +57,10 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     
     # Load test data
     try:
-        test_images, test_labels = load_iam_data(split="test")
-        log_info(MODEL_NAME, f"Loaded {len(test_images)} test images")
+        ds = load_from_disk('/scratch/network/aj7878/not_flawless/data/iam')
+        test_images = [i['image'] for i in ds]
+        test_labels = [i['text'] for i in ds]
+        log_info(MODEL_NAME, f"Loaded {len(test_images)} images")
     except Exception as e:
         log_error(MODEL_NAME, f"Failed to load test data: {str(e)}")
         return {"error": str(e)}
@@ -76,7 +79,7 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(image_paths: List[str], ground_truths: List[str]) -> Dict[str, Any]:
+def _run_evaluation(images: List[Image], ground_truths: List[str]) -> Dict[str, Any]:
     """
     Run evaluation on test set
     
@@ -93,11 +96,11 @@ def _run_evaluation(image_paths: List[str], ground_truths: List[str]) -> Dict[st
     inference_times = []
     num_errors = 0
     
-    log_info(MODEL_NAME, f"Processing {len(image_paths)} images")
+    log_info(MODEL_NAME, f"Processing {len(images)} images")
     
-    for idx, (image_path, ground_truth) in enumerate(zip(image_paths, ground_truths)):
+    for idx, (img, ground_truth) in enumerate(zip(images, ground_truths)):
         result = {
-            "image_path": image_path,
+            "image_path": idx,
             "ground_truth": ground_truth,
             "predicted_text": None,
             "cer": None,
@@ -108,7 +111,7 @@ def _run_evaluation(image_paths: List[str], ground_truths: List[str]) -> Dict[st
         
         try:
             # Load image
-            image = Image.open(image_path)
+            image = img
             
             # Perform OCR
             start_time = time.time()
@@ -130,10 +133,10 @@ def _run_evaluation(image_paths: List[str], ground_truths: List[str]) -> Dict[st
             
             if (idx + 1) % 50 == 0:
                 avg_time = sum(inference_times) / len(inference_times)
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(image_paths)} | Avg time: {avg_time:.3f}s")
+                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(images)} | Avg time: {avg_time:.3f}s")
         
         except Exception as e:
-            log_warning(MODEL_NAME, f"Error processing image {image_path}: {str(e)}")
+            log_warning(MODEL_NAME, f"Error processing image {images}: {str(e)}")
             result["error"] = str(e)
             num_errors += 1
         
@@ -144,8 +147,8 @@ def _run_evaluation(image_paths: List[str], ground_truths: List[str]) -> Dict[st
     
     # Calculate aggregated metrics
     metrics = {
-        "num_samples": len(image_paths),
-        "num_successful": len(image_paths) - num_errors,
+        "num_samples": len(images),
+        "num_successful": len(images) - num_errors,
         "num_errors": num_errors,
     }
     

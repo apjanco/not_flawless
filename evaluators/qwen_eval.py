@@ -1,17 +1,19 @@
 """
 evaluators/qwen_eval.py
-Qwen2-VL 8B vision-language model evaluator for OCR
+Qwen3-VL-8B-Instruct vision-language model evaluator for OCR
 """
-
+import io
+import base64
 import time
 from pathlib import Path
 from typing import Dict, Any, List
+from datasets import load_from_disk
 
 try:
-    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+    from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
     import torch
 except ImportError:
-    Qwen2VLForConditionalGeneration = None
+    Qwen3VLForConditionalGeneration = None
     AutoProcessor = None
     torch = None
 
@@ -22,11 +24,11 @@ from evaluators.utils import (
     log_info, log_error, log_warning
 )
 
-MODEL_NAME = "qwen2-vl-8b"
+MODEL_NAME = "Qwen3-VL-8B-Instruct"
 
 def check_dependencies():
     """Check if required packages are installed"""
-    return Qwen2VLForConditionalGeneration is not None and torch is not None
+    return Qwen3VLForConditionalGeneration is not None and torch is not None
 
 def evaluate(project_root: str = None) -> Dict[str, Any]:
     """
@@ -47,10 +49,10 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     
     # Initialize model
     try:
-        log_info(MODEL_NAME, "Initializing Qwen2-VL 8B model")
-        processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-8B-Instruct")
-        model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-8B-Instruct",
+        log_info(MODEL_NAME, "Initializing Qwen3-VL 8B model")
+        processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen3-VL-8B-Instruct",
             torch_dtype=torch.float16,
             device_map="auto"
         )
@@ -61,7 +63,9 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     
     # Load test data
     try:
-        test_images, test_labels = load_iam_data(split="test")
+        ds = load_from_disk('/scratch/network/aj7878/not_flawless/data/iam')
+        test_images = [i['image'] for i in ds]
+        test_labels = [i['text'] for i in ds]
         log_info(MODEL_NAME, f"Loaded {len(test_images)} test images")
     except Exception as e:
         log_error(MODEL_NAME, f"Failed to load test data: {str(e)}")
@@ -81,13 +85,13 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(model, processor, image_paths: List[str], ground_truths: List[str]) -> Dict[str, Any]:
+def _run_evaluation(model, processor, test_images: List[str], ground_truths: List[str]) -> Dict[str, Any]:
     """
     Run evaluation on test set
     
     Args:
-        model: Qwen2-VL model instance
-        processor: Qwen2-VL processor instance
+        model:Qwen3-VL-8B-Instruct model instance
+        processor: Qwen3-VL-8B-Instruct processor instance
         image_paths: List of image file paths
         ground_truths: List of ground truth text
     
@@ -100,9 +104,9 @@ def _run_evaluation(model, processor, image_paths: List[str], ground_truths: Lis
     inference_times = []
     num_errors = 0
     
-    for idx, (image_path, ground_truth) in enumerate(zip(image_paths, ground_truths)):
+    for idx, (pil_img, ground_truth) in enumerate(zip(test_images, ground_truths)):
         result = {
-            "image_path": image_path,
+            "image_path": idx,
             "ground_truth": ground_truth,
             "predicted_text": None,
             "cer": None,
@@ -112,41 +116,47 @@ def _run_evaluation(model, processor, image_paths: List[str], ground_truths: Lis
         }
         
         try:
-            from PIL import Image
             
-            # Load image
-            image = Image.open(image_path)
+            # Convert to base64 data URI
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG")
+            data_uri = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
             
             # Prepare input for Qwen2-VL
             messages = [
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image",
-                            "image": image_path,
-                        },
-                        {"type": "text", "text": "Please read and transcribe all text in this image."}
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                        {"type": "text", "text": "Extract all text."}
                     ],
                 }
             ]
             
             # Perform OCR
             start_time = time.time()
-            text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            image_inputs = processor(images=[image], return_tensors="pt").to("cuda")
-            text_input = processor(text=text, padding=True, return_tensors="pt").to("cuda")
             
-            with torch.no_grad():
-                output_ids = model.generate(
-                    **{**image_inputs, **text_input},
-                    max_new_tokens=1024,
-                )
-            
+            processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
+
+
+            # Preparation for inference
+            inputs = processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt"
+            )
+            inputs = inputs.to(model.device)
+
+            # Inference: Generation of the output
+            generated_ids = model.generate(**inputs, max_new_tokens=800)
+            generated_ids_trimmed = [
+                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
             predicted_text = processor.batch_decode(
-                output_ids[:, text_input.input_ids.shape[1]:],
-                skip_special_tokens=True,
-            )[0].strip()
+                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            )
             
             inference_time = time.time() - start_time
             
@@ -164,10 +174,10 @@ def _run_evaluation(model, processor, image_paths: List[str], ground_truths: Lis
             inference_times.append(inference_time)
             
             if (idx + 1) % 100 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(image_paths)} images")
+                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(test_images)} images")
         
         except Exception as e:
-            log_warning(MODEL_NAME, f"Error processing image {image_path}: {str(e)}")
+            log_warning(MODEL_NAME, f"Error processing image {idx}: {str(e)}")
             result["error"] = str(e)
             num_errors += 1
         
@@ -178,8 +188,8 @@ def _run_evaluation(model, processor, image_paths: List[str], ground_truths: Lis
     
     # Calculate aggregated metrics
     metrics = {
-        "num_samples": len(image_paths),
-        "num_successful": len(image_paths) - num_errors,
+        "num_samples": len(test_images),
+        "num_successful": len(test_images) - num_errors,
         "num_errors": num_errors,
     }
     

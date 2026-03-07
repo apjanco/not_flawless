@@ -20,6 +20,9 @@ chmod +x setup/*.sh
 ./setup/setup_environment.sh
 ```
 
+module load anaconda3/2025.6
+conda activate not_flawless
+
 ### 2. Run Batch Evaluations on Adroit HPC
 
 ```bash

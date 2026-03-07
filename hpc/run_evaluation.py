@@ -109,12 +109,11 @@ def main():
     evaluators = [
         # (module, name)
         # Uncomment as evaluator scripts are implemented
-        (tesseract_eval, "Tesseract"),
-        (pylaia_eval, "PyLaia"),
-        (kraken_eval, "Kraken"),
+        #(tesseract_eval, "Tesseract"),
+        #(kraken_eval, "Kraken"),
         (qwen_eval, "Qwen2-VL-8B"),
-        (deepseek_eval, "DeepSeek-OCR"),
-        (chandra_eval, "Chandra"),
+        #(deepseek_eval, "DeepSeek-OCR"),
+        #(chandra_eval, "Chandra"),
     ]
     
     print(f"\nScheduled evaluators: {len(evaluators)}")
