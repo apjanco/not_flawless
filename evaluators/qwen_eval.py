@@ -25,6 +25,8 @@ from evaluators.utils import (
 )
 
 MODEL_NAME = "Qwen3-VL-8B-Instruct"
+# Local path for offline use on compute nodes (no internet access)
+LOCAL_MODEL_PATH = "/scratch/network/aj7878/not_flawless/models/Qwen3-VL-8B-Instruct"
 
 def check_dependencies():
     """Check if required packages are installed"""
@@ -49,12 +51,13 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     
     # Initialize model
     try:
-        log_info(MODEL_NAME, "Initializing Qwen3-VL 8B model")
-        processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
+        log_info(MODEL_NAME, f"Loading Qwen3-VL 8B model from {LOCAL_MODEL_PATH}")
+        processor = AutoProcessor.from_pretrained(LOCAL_MODEL_PATH, local_files_only=True)
         model = Qwen3VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-8B-Instruct",
+            LOCAL_MODEL_PATH,
             torch_dtype=torch.float16,
-            device_map="auto"
+            device_map="auto",
+            local_files_only=True
         )
         log_info(MODEL_NAME, "Model initialized successfully")
     except Exception as e:
@@ -135,9 +138,6 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             
             # Perform OCR
             start_time = time.time()
-            
-            processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
-
 
             # Preparation for inference
             inputs = processor.apply_chat_template(
@@ -156,7 +156,7 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             ]
             predicted_text = processor.batch_decode(
                 generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
+            )[0]  # Extract first element since we process one image at a time
             
             inference_time = time.time() - start_time
             
