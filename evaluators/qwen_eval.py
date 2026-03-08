@@ -173,9 +173,17 @@ def get_semantic_error(model, processor, inputs, ground_truth: str, predicted_te
             # Get the last layer output
             last_hidden = nns_model.model.language_model.layers[-1].output[0].save()
     
+    # Ensure last_hidden is 3D (batch, seq_len, hidden_dim)
+    if last_hidden.dim() == 2:
+        last_hidden = last_hidden.unsqueeze(0)  # Add batch dimension
+    
     # Project hidden states to vocabulary logits using the lm_head
     # last_hidden shape: (batch, seq_len, hidden_dim)
     logits = model.lm_head(last_hidden)  # (batch, seq_len, vocab_size)
+    
+    # Ensure logits is 3D
+    if logits.dim() == 2:
+        logits = logits.unsqueeze(0)
     
     # Apply softmax to get probabilities and log_softmax for log probs
     probs = F.softmax(logits, dim=-1)  # (batch, seq_len, vocab_size)
