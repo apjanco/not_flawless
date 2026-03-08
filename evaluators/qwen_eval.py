@@ -9,6 +9,10 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Set
 from datasets import load_from_disk
+import torch
+from nnsight import NNsight
+import torch.nn.functional as F
+
 
 try:
     from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
@@ -133,6 +137,134 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
         log_info(MODEL_NAME, f"Evaluation paused - {metrics.get('num_successful', 0) + metrics.get('num_errors', 0)}/{metrics.get('num_samples', 0)} samples processed so far")
     return metrics
 
+def get_semantic_error(model, processor, inputs, ground_truth: str, predicted_text: str) -> Dict[str, float]:
+    """
+    Compute semantic error metrics comparing model confidence in predicted vs ground truth tokens.
+    
+    Semantic Error = mean(log P(predicted_token) - log P(correct_token))
+    
+    This captures: How much more confident was the model in its prediction vs the correct answer?
+    - Positive value: Model was more confident in wrong tokens
+    - Negative value: Model was more confident in correct tokens (but still predicted wrong)
+    - Zero: Equal confidence (or perfect prediction)
+    
+    Also computes KL divergence between the distributions.
+    Entropy tells you: Was the model sure about something?
+    KL tells you: Was the model right about the correct answer?
+
+    A model can be confidently wrong (low entropy, high KL) or uncertainly right (high entropy, low KL).
+    
+    Args:
+        model: The Qwen3-VL model
+        processor: The processor/tokenizer
+        inputs: Pre-processed inputs (with image)
+        ground_truth: The correct text
+        predicted_text: The model's prediction
+        
+    Returns:
+        Dictionary with semantic_error and kl_divergence metrics
+    """
+    # Wrap the model with nnsight
+    nns_model = NNsight(model)
+    
+    # Forward pass to get last layer activations
+    with torch.no_grad():
+        with nns_model.trace(**inputs):
+            # Get the last layer output
+            last_hidden = nns_model.model.language_model.layers[-1].output[0].save()
+    
+    # Project hidden states to vocabulary logits using the lm_head
+    # last_hidden shape: (batch, seq_len, hidden_dim)
+    logits = model.lm_head(last_hidden)  # (batch, seq_len, vocab_size)
+    
+    # Apply softmax to get probabilities and log_softmax for log probs
+    probs = F.softmax(logits, dim=-1)  # (batch, seq_len, vocab_size)
+    log_probs = F.log_softmax(logits, dim=-1)  # (batch, seq_len, vocab_size)
+    
+    # Tokenize ground truth and predicted text
+    gt_tokens = processor.tokenizer.encode(ground_truth, add_special_tokens=False)
+    pred_tokens = processor.tokenizer.encode(predicted_text, add_special_tokens=False)
+    
+    # Get probabilities at the last input position (first generation step)
+    first_pos_probs = probs[0, -1, :]  # (vocab_size,)
+    first_pos_log_probs = log_probs[0, -1, :]  # (vocab_size,)
+    
+    # Compute entropy of the distribution: H = -sum(P * log P)
+    # High entropy = model is uncertain, low entropy = model is confident
+    entropy = -torch.sum(first_pos_probs * first_pos_log_probs).item()
+    
+    # Get sorted indices for rank computation (descending by probability)
+    sorted_indices = torch.argsort(first_pos_probs, descending=True)
+    # Create rank lookup: token_id -> rank (0-indexed, so rank 0 = top prediction)
+    rank_lookup = {token_id.item(): rank for rank, token_id in enumerate(sorted_indices)}
+    
+    # Compute log probability differences for aligned tokens
+    # log P(pred) - log P(gt) for each position
+    min_len = min(len(gt_tokens), len(pred_tokens), 50)  # Limit to first 50 tokens
+    
+    log_diffs = []
+    kl_components = []
+    gt_ranks = []
+    
+    # Clamp log probs to avoid extreme values (min ~= log(1e-10))
+    min_log_prob = -23.0  # Approximately log(1e-10)
+    
+    for i in range(min_len):
+        gt_token = gt_tokens[i]
+        pred_token = pred_tokens[i]
+        
+        log_p_pred = max(first_pos_log_probs[pred_token].item(), min_log_prob)
+        log_p_gt = max(first_pos_log_probs[gt_token].item(), min_log_prob)
+        
+        # Semantic error: log(P_pred) - log(P_gt)
+        # Positive = model preferred predicted token
+        # Negative = model actually preferred ground truth token
+        log_diff = log_p_pred - log_p_gt
+        log_diffs.append(log_diff)
+        
+        # Rank of ground truth token (0 = best, higher = worse)
+        gt_rank = rank_lookup.get(gt_token, len(rank_lookup))
+        gt_ranks.append(gt_rank)
+        
+        # KL divergence component: -log P(gt) for one-hot ground truth
+        p_gt = first_pos_probs[gt_token].item()
+        p_pred = first_pos_probs[pred_token].item()
+        
+        # Avoid log(0) issues
+        eps = 1e-10
+        if gt_token != pred_token:
+            # KL between one-hot GT and model's distribution at pred position
+            kl = -log_p_gt  # Since one-hot, this simplifies to -log P(gt)
+            kl_components.append(kl)
+    
+    # Compute metrics
+    if log_diffs:
+        semantic_error = sum(log_diffs) / len(log_diffs)
+    else:
+        semantic_error = 0.0
+    
+    if kl_components:
+        kl_divergence = sum(kl_components) / len(kl_components)
+    else:
+        kl_divergence = 0.0
+    
+    if gt_ranks:
+        mean_gt_rank = sum(gt_ranks) / len(gt_ranks)
+        # Also track how many GT tokens were in top-5
+        top5_accuracy = sum(1 for r in gt_ranks if r < 5) / len(gt_ranks)
+    else:
+        mean_gt_rank = 0.0
+        top5_accuracy = 0.0
+    
+    return {
+        "semantic_error": semantic_error,
+        "kl_divergence": kl_divergence,
+        "entropy": entropy,
+        "mean_gt_rank": mean_gt_rank,
+        "top5_accuracy": top5_accuracy
+    }
+
+
 def _run_evaluation(model, processor, test_images: List[str], ground_truths: List[str]) -> Dict[str, Any]:
     """
     Run evaluation on test set with checkpoint/resume support.
@@ -179,6 +311,11 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             "predicted_text": None,
             "cer": None,
             "wer": None,
+            "semantic_error": None,
+            "kl_divergence": None,
+            "entropy": None,
+            "mean_gt_rank": None,
+            "top5_accuracy": None,
             "inference_time": None,
             "error": None
         }
@@ -190,7 +327,7 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             pil_img.save(buf, format="PNG")
             data_uri = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
             
-            # Prepare input for Qwen2-VL
+            # Prepare input for Qwen3-VL
             messages = [
                 {
                     "role": "user",
@@ -228,10 +365,16 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             # Calculate metrics
             cer = character_error_rate(ground_truth, predicted_text)
             wer = word_error_rate(ground_truth, predicted_text)
-            
+            semantic_metrics = get_semantic_error(model, processor, inputs, ground_truth, predicted_text)
+
             result["predicted_text"] = predicted_text
             result["cer"] = cer
             result["wer"] = wer
+            result["semantic_error"] = semantic_metrics["semantic_error"]
+            result["kl_divergence"] = semantic_metrics["kl_divergence"]
+            result["entropy"] = semantic_metrics["entropy"]
+            result["mean_gt_rank"] = semantic_metrics["mean_gt_rank"]
+            result["top5_accuracy"] = semantic_metrics["top5_accuracy"]
             result["inference_time"] = inference_time
             
             cer_values.append(cer)
