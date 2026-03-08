@@ -3,10 +3,11 @@ evaluators/qwen_eval.py
 Qwen3-VL-8B-Instruct vision-language model evaluator for OCR
 """
 import io
+import json
 import base64
 import time
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 from datasets import load_from_disk
 
 try:
@@ -27,10 +28,52 @@ from evaluators.utils import (
 MODEL_NAME = "Qwen3-VL-8B-Instruct"
 # Local path for offline use on compute nodes (no internet access)
 LOCAL_MODEL_PATH = "/scratch/network/aj7878/not_flawless/models/Qwen3-VL-8B-Instruct"
+# Checkpoint file for resumable evaluation
+CHECKPOINT_FILE = "/scratch/network/aj7878/not_flawless/results/Qwen3-VL-8B-Instruct_checkpoint.jsonl"
 
 def check_dependencies():
     """Check if required packages are installed"""
     return Qwen3VLForConditionalGeneration is not None and torch is not None
+
+
+def load_checkpoint() -> tuple[Set[int], List[Dict]]:
+    """
+    Load existing checkpoint data to resume evaluation.
+    
+    Returns:
+        Tuple of (set of processed indices, list of existing results)
+    """
+    checkpoint_path = Path(CHECKPOINT_FILE)
+    processed_indices = set()
+    existing_results = []
+    
+    if checkpoint_path.exists():
+        try:
+            with open(checkpoint_path, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        result = json.loads(line)
+                        existing_results.append(result)
+                        processed_indices.add(result["image_path"])
+            log_info(MODEL_NAME, f"Loaded checkpoint with {len(processed_indices)} already processed images")
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Failed to load checkpoint: {str(e)}, starting fresh")
+    
+    return processed_indices, existing_results
+
+
+def save_checkpoint_result(result: Dict):
+    """
+    Append a single result to the checkpoint file.
+    
+    Args:
+        result: Result dictionary for one image
+    """
+    checkpoint_path = Path(CHECKPOINT_FILE)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(checkpoint_path, 'a') as f:
+        f.write(json.dumps(result) + '\n')
 
 def evaluate(project_root: str = None) -> Dict[str, Any]:
     """
@@ -81,16 +124,18 @@ def evaluate(project_root: str = None) -> Dict[str, Any]:
     # Run evaluation
     metrics = _run_evaluation(model, processor, test_images, test_labels)
     
-    # Save results
-    save_metrics(MODEL_NAME, metrics)
-    append_metrics_csv(MODEL_NAME, metrics)
-    
-    log_info(MODEL_NAME, "Evaluation complete")
+    # Only save final metrics if all samples are processed
+    if metrics.get("num_successful", 0) + metrics.get("num_errors", 0) == metrics.get("num_samples", 0):
+        save_metrics(MODEL_NAME, metrics)
+        append_metrics_csv(MODEL_NAME, metrics)
+        log_info(MODEL_NAME, "Evaluation complete - all samples processed")
+    else:
+        log_info(MODEL_NAME, f"Evaluation paused - {metrics.get('num_successful', 0) + metrics.get('num_errors', 0)}/{metrics.get('num_samples', 0)} samples processed so far")
     return metrics
 
 def _run_evaluation(model, processor, test_images: List[str], ground_truths: List[str]) -> Dict[str, Any]:
     """
-    Run evaluation on test set
+    Run evaluation on test set with checkpoint/resume support.
     
     Args:
         model:Qwen3-VL-8B-Instruct model instance
@@ -101,13 +146,33 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
     Returns:
         Dictionary of metrics
     """
-    results = []
+    # Load existing checkpoint
+    processed_indices, existing_results = load_checkpoint()
+    
+    results = existing_results.copy()
     cer_values = []
     wer_values = []
     inference_times = []
     num_errors = 0
     
+    # Extract metrics from existing results
+    for r in existing_results:
+        if r.get("cer") is not None:
+            cer_values.append(r["cer"])
+        if r.get("wer") is not None:
+            wer_values.append(r["wer"])
+        if r.get("inference_time") is not None:
+            inference_times.append(r["inference_time"])
+        if r.get("error") is not None:
+            num_errors += 1
+    
+    new_processed = 0
+    
     for idx, (pil_img, ground_truth) in enumerate(zip(test_images, ground_truths)):
+        # Skip already processed images
+        if idx in processed_indices:
+            continue
+        
         result = {
             "image_path": idx,
             "ground_truth": ground_truth,
@@ -174,17 +239,26 @@ def _run_evaluation(model, processor, test_images: List[str], ground_truths: Lis
             inference_times.append(inference_time)
             
             if (idx + 1) % 100 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(test_images)} images")
+                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(test_images)} images (total), {new_processed} new in this run")
         
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing image {idx}: {str(e)}")
             result["error"] = str(e)
             num_errors += 1
         
+        # Save checkpoint after each image
+        save_checkpoint_result(result)
         results.append(result)
+        new_processed += 1
+        
+        # Log progress every 10 new images
+        if new_processed % 10 == 0:
+            log_info(MODEL_NAME, f"Progress: {len(results)}/{len(test_images)} total, {new_processed} new this run")
     
-    # Save JSONL results
-    save_results_jsonl(MODEL_NAME, results)
+    # Save JSONL results (final version with all results)
+    if len(results) == len(test_images):
+        save_results_jsonl(MODEL_NAME, results)
+        log_info(MODEL_NAME, "All images processed, saved final results")
     
     # Calculate aggregated metrics
     metrics = {
