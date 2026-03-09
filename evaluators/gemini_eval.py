@@ -1,6 +1,6 @@
 """
 evaluators/gemini_eval.py
-Google Gemini (via Portkey API) OCR evaluator with enhanced logprobs and tokenizer support
+Google Gemini (direct Google API) OCR evaluator with logprobs and tokenizer support
 """
 
 import time
@@ -38,25 +38,19 @@ from .utils import (
     log_info, log_error, log_warning
 )
 
-MODEL_NAME = "gemini-portkey"
+MODEL_NAME = "gemini-direct"
 MODEL_ID = "gemini-2.5-flash"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 def check_dependencies():
     """Check if required packages are installed"""
     return REQUESTS_AVAILABLE and GENAI_AVAILABLE
 
-def get_portkey_key():
-    """Get Portkey API key from environment"""
-    api_key = os.getenv("PORTKEY_API_KEY")
-    if not api_key:
-        log_warning(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
-    return api_key
-
 def get_google_api_key():
-    """Get Google API key for tokenizer access"""
+    """Get Google API key from environment"""
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        log_warning(MODEL_NAME, "GOOGLE_API_KEY environment variable not set for tokenizer")
+        log_warning(MODEL_NAME, "GOOGLE_API_KEY environment variable not set")
     return api_key
 
 def get_gemini_tokenizer():
@@ -93,26 +87,18 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     Returns:
         Dictionary of evaluation metrics
     """
-    log_info(MODEL_NAME, "Starting Gemini evaluation via Portkey")
+    log_info(MODEL_NAME, "Starting Gemini evaluation via Google API (direct)")
     
     # Check dependencies
     if not check_dependencies():
         log_error(MODEL_NAME, "requests and/or google-genai not installed")
         return {"error": "Dependencies not available"}
     
-    # Check PORTKEY_API_KEY (required)
-    portkey_key = get_portkey_key()
-    if not portkey_key:
-        log_error(MODEL_NAME, "PORTKEY_API_KEY environment variable is REQUIRED but not set")
-        log_error(MODEL_NAME, "Please set: export PORTKEY_API_KEY='your-portkey-key'")
-        return {"error": "PORTKEY_API_KEY not configured - evaluation cannot proceed"}
-    
-    # Check GOOGLE_API_KEY (required for tokenizer)
+    # Check GOOGLE_API_KEY (required for both inference and tokenizer)
     google_api_key = get_google_api_key()
     if not google_api_key:
         log_error(MODEL_NAME, "GOOGLE_API_KEY environment variable is REQUIRED but not set")
         log_error(MODEL_NAME, "Please set: export GOOGLE_API_KEY='your-google-api-key'")
-        log_error(MODEL_NAME, "Note: GOOGLE_API_KEY is needed for accurate token-level semantic error analysis")
         return {"error": "GOOGLE_API_KEY not configured - evaluation cannot proceed"}
     
     # Initialize tokenizer with validated API key
@@ -137,7 +123,7 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
         return {"error": "No test data"}
     
     # Run evaluation
-    metrics = _run_evaluation(portkey_key, test_images, test_labels, tokenizer_model, top_logprobs)
+    metrics = _run_evaluation(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs)
     
     # Save results
     save_metrics(MODEL_NAME, metrics)
@@ -146,15 +132,15 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
+def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
     """
-    Run evaluation on test set with Portkey API
+    Run evaluation on test set calling Google Gemini API directly.
     
     Args:
-        portkey_key: Portkey API key
+        google_api_key: Google API key
         test_images: List of PIL Image objects
         test_labels: List of ground truth text labels
-        tokenizer_model: Gemini model for tokenization (optional)
+        tokenizer_model: Gemini client for tokenization (optional)
         top_logprobs: Number of top alternative tokens to return
     
     Returns:
@@ -166,11 +152,8 @@ def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, toke
     inference_times = []
     num_errors = 0
     
-    # Prepare API headers for Portkey
-    headers = {
-        "x-portkey-api-key": portkey_key,
-        "Content-Type": "application/json"
-    }
+    api_url = GEMINI_API_URL.format(model=MODEL_ID)
+    headers = {"Content-Type": "application/json"}
     
     prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
     
@@ -200,37 +183,35 @@ def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, toke
             pil_image.save(buf, format="PNG")
             image_data = base64.b64encode(buf.getvalue()).decode()
             
-            # Prepare Portkey request with logprobs enabled
+            # Build native Gemini REST payload with logprobs enabled
             payload = {
-                "model": MODEL_ID,
-                "messages": [
+                "contents": [
                     {
-                        "role": "user",
-                        "content": [
+                        "parts": [
+                            {"text": prompt},
                             {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{image_data}"
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": image_data
                                 }
                             }
                         ]
                     }
                 ],
-                "max_tokens": 1024,
-                "logprobs": True,
-                "top_logprobs": top_logprobs
+                "generationConfig": {
+                    "maxOutputTokens": 1024,
+                    "responseLogprobs": True,
+                    "logprobs": top_logprobs
+                }
             }
             
-            # Call Portkey API
+            # Call Google Gemini API directly
             start_time = time.time()
             response = requests.post(
-                "https://api.portkey.ai/v1/chat/completions",
+                api_url,
                 json=payload,
                 headers=headers,
+                params={"key": google_api_key},
                 timeout=60
             )
             inference_time = time.time() - start_time
@@ -240,10 +221,14 @@ def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, toke
             
             response_data = response.json()
             
-            # Extract text response
+            # Extract text response from native Gemini format
+            # Structure: candidates[0].content.parts[0].text
             predicted_text = ""
-            if response_data.get("choices") and len(response_data["choices"]) > 0:
-                predicted_text = response_data["choices"][0].get("message", {}).get("content", "").strip()
+            candidates = response_data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    predicted_text = parts[0].get("text", "").strip()
             
             # Extract logprobs from response
             logprobs_data = _extract_logprobs_from_response(response_data)
@@ -331,43 +316,60 @@ def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, toke
 
 def _extract_logprobs_from_response(response_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """
-    Extract logprobs from Portkey API response (OpenAI-compatible format)
-    
+    Extract logprobs from a native Google Gemini API response.
+
+    The Gemini REST API returns logprobs under:
+      candidates[0].logprobsResult.chosenCandidates   — the chosen token at each position
+      candidates[0].logprobsResult.topCandidates[i]   — list of top-k alternatives per position
+
+    Each entry in chosenCandidates / topCandidates has the shape:
+      { "token": str, "tokenId": int, "logProbability": float }
+
+    We normalise this into the same internal format used by the rest of the pipeline:
+      { "token": str, "logprob": float, "prob": float, "top_tokens": [...] }
+
     Args:
-        response_data: Parsed JSON response from Portkey API
-    
+        response_data: Parsed JSON response from the Gemini REST API
+
     Returns:
-        List of token logprob data with top alternatives
+        List of token logprob data with top alternatives, or None if unavailable
     """
     try:
+        candidates = response_data.get("candidates", [])
+        if not candidates:
+            return None
+
+        logprobs_result = candidates[0].get("logprobsResult", {})
+        chosen = logprobs_result.get("chosenCandidates", [])
+        top_candidates = logprobs_result.get("topCandidates", [])
+
+        if not chosen:
+            return None
+
         logprobs_data = []
-        
-        if response_data.get("choices") and len(response_data["choices"]) > 0:
-            choice = response_data["choices"][0]
-            
-            # Check for logprobs in the response
-            if choice.get("logprobs") and choice["logprobs"].get("content"):
-                for token_logprob in choice["logprobs"]["content"]:
-                    token_entry = {
-                        "token": token_logprob.get("token", ""),
-                        "logprob": token_logprob.get("logprob"),
-                        "prob": math.exp(token_logprob.get("logprob", -100)) if token_logprob.get("logprob") else None,
-                        "top_tokens": []
-                    }
-                    
-                    # Extract top alternative tokens
-                    if token_logprob.get("top_logprobs"):
-                        for alt_token_info in token_logprob["top_logprobs"]:
-                            token_entry["top_tokens"].append({
-                                "token": alt_token_info.get("token", ""),
-                                "logprob": alt_token_info.get("logprob"),
-                                "prob": math.exp(alt_token_info.get("logprob", -100)) if alt_token_info.get("logprob") else None
-                            })
-                    
-                    logprobs_data.append(token_entry)
-        
+        for i, chosen_token in enumerate(chosen):
+            logprob = chosen_token.get("logProbability")
+            token_entry = {
+                "token": chosen_token.get("token", ""),
+                "logprob": logprob,
+                "prob": math.exp(logprob) if logprob is not None else None,
+                "top_tokens": []
+            }
+
+            # top_candidates[i] is a dict with a "candidates" list
+            if i < len(top_candidates):
+                for alt in top_candidates[i].get("candidates", []):
+                    alt_logprob = alt.get("logProbability")
+                    token_entry["top_tokens"].append({
+                        "token": alt.get("token", ""),
+                        "logprob": alt_logprob,
+                        "prob": math.exp(alt_logprob) if alt_logprob is not None else None
+                    })
+
+            logprobs_data.append(token_entry)
+
         return logprobs_data if logprobs_data else None
-    
+
     except Exception as e:
         log_warning(MODEL_NAME, f"Failed to extract logprobs from response: {str(e)}")
         return None
