@@ -26,6 +26,11 @@ try:
 except ImportError:
     GENAI_AVAILABLE = False
 
+try:
+    from datasets import load_from_disk
+except ImportError:
+    load_from_disk = None
+
 from .utils import (
     get_data_dir, get_results_dir, load_iam_data,
     character_error_rate, word_error_rate,
@@ -92,32 +97,47 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     
     # Check dependencies
     if not check_dependencies():
-        log_error(MODEL_NAME, "requests and/or google-generativeai not installed")
+        log_error(MODEL_NAME, "requests and/or google-genai not installed")
         return {"error": "Dependencies not available"}
     
-    # Check API keys
+    # Check PORTKEY_API_KEY (required)
     portkey_key = get_portkey_key()
     if not portkey_key:
-        log_error(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
-        return {"error": "Portkey API key not configured"}
+        log_error(MODEL_NAME, "PORTKEY_API_KEY environment variable is REQUIRED but not set")
+        log_error(MODEL_NAME, "Please set: export PORTKEY_API_KEY='your-portkey-key'")
+        return {"error": "PORTKEY_API_KEY not configured - evaluation cannot proceed"}
     
-    # Initialize tokenizer (optional but recommended)
+    # Check GOOGLE_API_KEY (required for tokenizer)
+    google_api_key = get_google_api_key()
+    if not google_api_key:
+        log_error(MODEL_NAME, "GOOGLE_API_KEY environment variable is REQUIRED but not set")
+        log_error(MODEL_NAME, "Please set: export GOOGLE_API_KEY='your-google-api-key'")
+        log_error(MODEL_NAME, "Note: GOOGLE_API_KEY is needed for accurate token-level semantic error analysis")
+        return {"error": "GOOGLE_API_KEY not configured - evaluation cannot proceed"}
+    
+    # Initialize tokenizer with validated API key
     tokenizer_model = get_gemini_tokenizer()
+    if not tokenizer_model:
+        log_error(MODEL_NAME, "Failed to initialize Gemini tokenizer")
+        log_error(MODEL_NAME, "Ensure GOOGLE_API_KEY is set correctly and the Gemini API is accessible")
+        return {"error": "Tokenizer initialization failed - evaluation cannot proceed"}
     
-    # Load test data
+    # Load full IAM dataset from local disk
     try:
-        dataset = load_iam_data(split="test")
-        log_info(MODEL_NAME, f"Loaded {len(dataset)} test samples")
+        ds = load_from_disk('/scratch/network/aj7878/not_flawless/data/iam')
+        test_images = [i['image'] for i in ds]
+        test_labels = [i['text'] for i in ds]
+        log_info(MODEL_NAME, f"Loaded {len(test_images)} images from full IAM dataset")
     except Exception as e:
         log_error(MODEL_NAME, f"Failed to load test data: {str(e)}")
         return {"error": str(e)}
     
-    if not dataset or len(dataset) == 0:
-        log_warning(MODEL_NAME, "No test data found")
+    if not test_images:
+        log_warning(MODEL_NAME, "No test images found")
         return {"error": "No test data"}
     
     # Run evaluation
-    metrics = _run_evaluation(portkey_key, dataset, tokenizer_model, top_logprobs)
+    metrics = _run_evaluation(portkey_key, test_images, test_labels, tokenizer_model, top_logprobs)
     
     # Save results
     save_metrics(MODEL_NAME, metrics)
@@ -126,13 +146,14 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(portkey_key: str, dataset, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
+def _run_evaluation(portkey_key: str, test_images: List, test_labels: List, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
     """
     Run evaluation on test set with Portkey API
     
     Args:
         portkey_key: Portkey API key
-        dataset: HuggingFace dataset with 'image' and 'text' fields
+        test_images: List of PIL Image objects
+        test_labels: List of ground truth text labels
         tokenizer_model: Gemini model for tokenization (optional)
         top_logprobs: Number of top alternative tokens to return
     
@@ -153,10 +174,11 @@ def _run_evaluation(portkey_key: str, dataset, tokenizer_model, top_logprobs: in
     
     prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
     
-    for idx, example in enumerate(dataset):
+    num_samples = len(test_images)
+    for idx, (pil_image, ground_truth) in enumerate(zip(test_images, test_labels)):
         result = {
             "index": idx,
-            "ground_truth": example.get('text', ''),
+            "ground_truth": ground_truth,
             "predicted_text": None,
             "cer": None,
             "wer": None,
@@ -172,11 +194,8 @@ def _run_evaluation(portkey_key: str, dataset, tokenizer_model, top_logprobs: in
             "error": None
         }
         
-        ground_truth = example.get('text', '')
-        
         try:
-            # Get PIL image from dataset and encode to base64
-            pil_image = example['image']
+            # Encode PIL image to base64
             buf = io.BytesIO()
             pil_image.save(buf, format="PNG")
             image_data = base64.b64encode(buf.getvalue()).decode()
@@ -264,7 +283,7 @@ def _run_evaluation(portkey_key: str, dataset, tokenizer_model, top_logprobs: in
             inference_times.append(inference_time)
             
             if (idx + 1) % 10 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{len(dataset)} samples")
+                log_info(MODEL_NAME, f"Processed {idx + 1}/{num_samples} samples")
         
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
@@ -278,8 +297,8 @@ def _run_evaluation(portkey_key: str, dataset, tokenizer_model, top_logprobs: in
     
     # Calculate aggregated metrics
     metrics = {
-        "num_samples": len(dataset),
-        "num_successful": len(dataset) - num_errors,
+        "num_samples": num_samples,
+        "num_successful": num_samples - num_errors,
         "num_errors": num_errors,
     }
     
