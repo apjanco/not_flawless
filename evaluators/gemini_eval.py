@@ -38,8 +38,8 @@ from .utils import (
     log_info, log_error, log_warning
 )
 
-MODEL_NAME = "gemini-direct"
-MODEL_ID = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3-pro-preview"
+MODEL_ID = "gemini-3-pro-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 def check_dependencies():
