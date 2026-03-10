@@ -10,6 +10,7 @@ import os
 import math
 import io
 import base64
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -51,13 +52,65 @@ from evaluators.utils import (
 
 MODEL_NAME = "chatgpt-vision"
 MODEL_ID = "gpt-4o"
-MAX_CONCURRENT_REQUESTS = 10  # Adjust based on rate limits
+MAX_CONCURRENT_REQUESTS = 10
 
 def check_dependencies():
     """Check if required packages are installed"""
     if aiohttp is None:
         log_warning(MODEL_NAME, "aiohttp not installed, falling back to sync requests")
     return requests is not None or aiohttp is not None
+
+
+def _get_checkpoint_path() -> Path:
+    """Get path to checkpoint file."""
+    results_dir = get_results_dir()
+    return results_dir / f"{MODEL_NAME}_checkpoint.json"
+
+
+def _load_checkpoint() -> Dict[str, Any]:
+    """
+    Load checkpoint from disk.
+    
+    Returns:
+        Dictionary with 'completed_indices' (set of processed indices),
+        'results' (list of results), and 'last_run_date' (date string).
+    """
+    checkpoint_path = _get_checkpoint_path()
+    if checkpoint_path.exists():
+        try:
+            with open(checkpoint_path, 'r') as f:
+                data = json.load(f)
+            # Convert list back to set for efficient lookup
+            data['completed_indices'] = set(data.get('completed_indices', []))
+            log_info(MODEL_NAME, f"Loaded checkpoint: {len(data['completed_indices'])} samples already processed")
+            return data
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Failed to load checkpoint: {e}")
+    return {'completed_indices': set(), 'results': [], 'last_run_date': None}
+
+
+def _save_checkpoint(completed_indices: set, results: List[Dict], run_date: str):
+    """
+    Save checkpoint to disk.
+    
+    Args:
+        completed_indices: Set of indices that have been processed
+        results: List of result dictionaries
+        run_date: Date string of current run
+    """
+    checkpoint_path = _get_checkpoint_path()
+    try:
+        data = {
+            'completed_indices': list(completed_indices),
+            'results': results,
+            'last_run_date': run_date,
+            'total_processed': len(completed_indices)
+        }
+        with open(checkpoint_path, 'w') as f:
+            json.dump(data, f)
+        log_info(MODEL_NAME, f"Checkpoint saved: {len(completed_indices)} samples processed")
+    except Exception as e:
+        log_warning(MODEL_NAME, f"Failed to save checkpoint: {e}")
 
 def get_portkey_key():
     """Get Portkey API key from environment"""
@@ -66,13 +119,17 @@ def get_portkey_key():
         log_warning(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
     return api_key
 
-def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
+def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int = None) -> Dict[str, Any]:
     """
-    Main evaluation function
+    Main evaluation function with checkpointing support.
+    
+    Supports incremental evaluation - progress is saved to checkpoint file
+    and resumes from where it left off on subsequent runs.
 
     Args:
         project_root: Path to project root
         top_logprobs: Number of top alternative tokens to return (1-20)
+        max_requests: Maximum requests for this run (default: MAX_REQUESTS_PER_DAY)
 
     Returns:
         Dictionary of evaluation metrics
@@ -105,18 +162,228 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
         log_warning(MODEL_NAME, "No test images found")
         return {"error": "No test data"}
 
-    # Run evaluation (async if aiohttp available, else sync)
-    if aiohttp is not None:
-        metrics = asyncio.run(_run_evaluation_async(api_key, test_images, test_labels, top_logprobs))
-    else:
-        metrics = _run_evaluation_sync(api_key, test_images, test_labels, top_logprobs)
+    # Load checkpoint to resume from previous run
+    checkpoint = _load_checkpoint()
+    completed_indices = checkpoint['completed_indices']
+    existing_results = checkpoint['results']
+    
+    # Determine how many requests we can make
+    if max_requests is None:
+        max_requests = len(test_images)  # No daily limit for Portkey
+    
+    # Calculate remaining quota
+    remaining_indices = [i for i in range(len(test_images)) if i not in completed_indices]
+    requests_to_make = min(len(remaining_indices), max_requests)
+    
+    if not remaining_indices:
+        log_info(MODEL_NAME, "All samples already processed! Generating final metrics.")
+        metrics = _aggregate_metrics(existing_results, len(test_images))
+        save_metrics(MODEL_NAME, metrics)
+        append_metrics_csv(MODEL_NAME, metrics)
+        return metrics
+    
+    log_info(MODEL_NAME, f"Progress: {len(completed_indices)}/{len(test_images)} samples completed")
+    log_info(MODEL_NAME, f"Will process {requests_to_make} samples this run")
+    
+    # Select samples to process this run
+    indices_to_process = remaining_indices[:requests_to_make]
+    images_to_process = [test_images[i] for i in indices_to_process]
+    labels_to_process = [test_labels[i] for i in indices_to_process]
+    
+    # Run evaluation with checkpointing
+    new_results = _run_evaluation_with_checkpointing(
+        api_key, images_to_process, labels_to_process,
+        indices_to_process, top_logprobs,
+        completed_indices, existing_results
+    )
+    
+    # Merge results
+    all_results = existing_results + new_results
+    completed_indices.update(r['index'] for r in new_results if not r.get('error'))
+    
+    # Save final checkpoint
+    today = time.strftime('%Y-%m-%d')
+    _save_checkpoint(completed_indices, all_results, today)
+    
+    # Generate metrics
+    metrics = _aggregate_metrics(all_results, len(test_images))
+    metrics['checkpoint_info'] = {
+        'total_samples': len(test_images),
+        'processed_samples': len(completed_indices),
+        'remaining_samples': len(test_images) - len(completed_indices),
+        'is_complete': len(completed_indices) >= len(test_images)
+    }
 
     # Save results
     save_metrics(MODEL_NAME, metrics)
     append_metrics_csv(MODEL_NAME, metrics)
+    save_results_jsonl(MODEL_NAME, all_results)
 
-    log_info(MODEL_NAME, "Evaluation complete")
+    log_info(MODEL_NAME, f"Evaluation run complete. Progress: {len(completed_indices)}/{len(test_images)}")
+    if len(completed_indices) < len(test_images):
+        log_info(MODEL_NAME, f"Run again to continue ({len(test_images) - len(completed_indices)} samples remaining)")
+    
     return metrics
+
+
+def _run_evaluation_with_checkpointing(
+    api_key: str,
+    test_images: List,
+    test_labels: List,
+    indices: List[int],
+    top_logprobs: int,
+    completed_indices: set,
+    existing_results: List[Dict]
+) -> List[Dict[str, Any]]:
+    """
+    Run evaluation with rate limiting and incremental checkpointing.
+    
+    Processes images one at a time with delays to respect rate limits,
+    saving checkpoint after each batch of successful requests.
+    
+    Args:
+        api_key: Portkey API key
+        test_images: List of PIL Image objects to process
+        test_labels: List of ground truth text labels
+        indices: Original indices of these samples in full dataset
+        top_logprobs: Number of top alternative tokens to return
+        completed_indices: Set of already completed indices (for checkpoint)
+        existing_results: Existing results from checkpoint
+    
+    Returns:
+        List of new result dictionaries
+    """
+    results = []
+    headers = {
+        "x-portkey-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    
+    num_samples = len(test_images)
+    today = time.strftime('%Y-%m-%d')
+    
+    # Create iterator with tqdm progress bar if available
+    iterator = enumerate(zip(indices, test_images, test_labels))
+    if tqdm is not None:
+        iterator = tqdm(iterator, desc=f"{MODEL_NAME}", total=num_samples, unit="img")
+    
+    for batch_idx, (original_idx, pil_image, ground_truth) in iterator:
+        result = {
+            "index": original_idx,
+            "ground_truth": ground_truth,
+            "predicted_text": None,
+            "cer": None,
+            "wer": None,
+            "semantic_error": None,
+            "kl_divergence": None,
+            "entropy": None,
+            "mean_gt_rank": None,
+            "top5_accuracy": None,
+            "inference_time": None,
+            "logprobs": None,
+            "mean_logprob": None,
+            "confidence": None,
+            "error": None,
+            "run_date": today
+        }
+        
+        try:
+            # Encode PIL image to base64
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_data = base64.b64encode(buf.getvalue()).decode()
+            
+            payload = {
+                "model": MODEL_ID,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 1024,
+                "logprobs": True,
+                "top_logprobs": top_logprobs
+            }
+            
+            # Call API via Portkey
+            start_time = time.time()
+            response = requests.post(
+                "https://api.portkey.ai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            inference_time = time.time() - start_time
+            
+            if response.status_code == 429:
+                # Rate limited - wait and retry once
+                log_warning(MODEL_NAME, "Rate limited (429), waiting 60s before retry...")
+                time.sleep(60)
+                response = requests.post(
+                    "https://api.portkey.ai/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+                inference_time = time.time() - start_time
+            
+            if response.status_code != 200:
+                raise Exception(f"API error: {response.status_code} - {response.text}")
+            
+            response_data = response.json()
+            predicted_text = response_data["choices"][0]["message"]["content"].strip()
+            logprobs_data = _extract_logprobs(response_data)
+            
+            # Calculate mean logprob and confidence
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    confidence = math.exp(mean_logprob) * 100
+            
+            # Calculate metrics
+            cer = character_error_rate(ground_truth, predicted_text)
+            wer = word_error_rate(ground_truth, predicted_text)
+            semantic_metrics = get_semantic_error(logprobs_data, ground_truth, predicted_text)
+            
+            result["predicted_text"] = predicted_text
+            result["cer"] = cer
+            result["wer"] = wer
+            result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
+            result["semantic_error"] = semantic_metrics.get("semantic_error")
+            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
+            result["entropy"] = semantic_metrics.get("entropy")
+            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
+            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            
+            # Update completed indices
+            completed_indices.add(original_idx)
+            
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Error processing sample {original_idx}: {str(e)}")
+            result["error"] = str(e)
+        
+        results.append(result)
+        
+        # Save checkpoint every 10 samples or on last sample
+        if (batch_idx + 1) % 10 == 0 or batch_idx == num_samples - 1:
+            all_results = existing_results + results
+            _save_checkpoint(completed_indices, all_results, today)
+    
+    return results
 
 
 async def _process_single_image(
