@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 try:
+    from dotenv import load_dotenv
+    # Load .env file from project root
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass  # dotenv not installed, rely on system env vars
+
+try:
     import requests
 except ImportError:
     requests = None

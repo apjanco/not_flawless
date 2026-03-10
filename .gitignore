@@ -1,5 +1,10 @@
 # .gitignore
 
+# Environment variables (secrets)
+.env
+.env.local
+.env.*.local
+
 # Data
 data/iam/
 data/other_datasets/

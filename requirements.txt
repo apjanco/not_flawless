@@ -4,6 +4,7 @@ matplotlib
 opencv-python
 pillow
 scipy
+python-dotenv
 
 # OCR/HTR Models
 pytesseract
