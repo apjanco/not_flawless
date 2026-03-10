@@ -1,8 +1,10 @@
 """
 evaluators/chatgpt_eval.py
 ChatGPT (via OpenAI API via Portkey) OCR evaluator with logprobs and semantic error analysis
+Uses async requests for faster evaluation.
 """
 
+import asyncio
 import time
 import os
 import math
@@ -19,6 +21,11 @@ except ImportError:
     pass  # dotenv not installed, rely on system env vars
 
 try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
+
+try:
     import requests
 except ImportError:
     requests = None
@@ -27,6 +34,13 @@ try:
     from datasets import load_from_disk
 except ImportError:
     load_from_disk = None
+
+try:
+    from tqdm import tqdm
+    from tqdm.asyncio import tqdm as atqdm
+except ImportError:
+    tqdm = None
+    atqdm = None
 
 from evaluators.utils import (
     get_data_dir, get_results_dir,
@@ -37,10 +51,13 @@ from evaluators.utils import (
 
 MODEL_NAME = "chatgpt-vision"
 MODEL_ID = "gpt-4o"
+MAX_CONCURRENT_REQUESTS = 10  # Adjust based on rate limits
 
 def check_dependencies():
     """Check if required packages are installed"""
-    return requests is not None
+    if aiohttp is None:
+        log_warning(MODEL_NAME, "aiohttp not installed, falling back to sync requests")
+    return requests is not None or aiohttp is not None
 
 def get_portkey_key():
     """Get Portkey API key from environment"""
@@ -88,8 +105,11 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
         log_warning(MODEL_NAME, "No test images found")
         return {"error": "No test data"}
 
-    # Run evaluation
-    metrics = _run_evaluation(api_key, test_images, test_labels, top_logprobs)
+    # Run evaluation (async if aiohttp available, else sync)
+    if aiohttp is not None:
+        metrics = asyncio.run(_run_evaluation_async(api_key, test_images, test_labels, top_logprobs))
+    else:
+        metrics = _run_evaluation_sync(api_key, test_images, test_labels, top_logprobs)
 
     # Save results
     save_metrics(MODEL_NAME, metrics)
@@ -98,52 +118,52 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(api_key: str, test_images: List, test_labels: List, top_logprobs: int = 5) -> Dict[str, Any]:
-    """
-    Run evaluation on test set via Portkey → OpenAI.
 
+async def _process_single_image(
+    session: "aiohttp.ClientSession",
+    semaphore: asyncio.Semaphore,
+    idx: int,
+    pil_image,
+    ground_truth: str,
+    headers: Dict[str, str],
+    prompt: str,
+    top_logprobs: int
+) -> Dict[str, Any]:
+    """
+    Process a single image asynchronously.
+    
     Args:
-        api_key: Portkey API key
-        test_images: List of PIL Image objects
-        test_labels: List of ground truth text labels
-        top_logprobs: Number of top alternative tokens to request
-
+        session: aiohttp session
+        semaphore: Semaphore to limit concurrency
+        idx: Image index
+        pil_image: PIL Image object
+        ground_truth: Ground truth text
+        headers: Request headers
+        prompt: OCR prompt
+        top_logprobs: Number of top logprobs to request
+    
     Returns:
-        Dictionary of aggregated metrics
+        Result dictionary for this image
     """
-    results = []
-    cer_values = []
-    wer_values = []
-    inference_times = []
-    num_errors = 0
-
-    headers = {
-        "x-portkey-api-key": api_key,
-        "Content-Type": "application/json"
+    result = {
+        "index": idx,
+        "ground_truth": ground_truth,
+        "predicted_text": None,
+        "cer": None,
+        "wer": None,
+        "semantic_error": None,
+        "kl_divergence": None,
+        "entropy": None,
+        "mean_gt_rank": None,
+        "top5_accuracy": None,
+        "inference_time": None,
+        "logprobs": None,
+        "mean_logprob": None,
+        "confidence": None,
+        "error": None
     }
-
-    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
-
-    num_samples = len(test_images)
-    for idx, (pil_image, ground_truth) in enumerate(zip(test_images, test_labels)):
-        result = {
-            "index": idx,
-            "ground_truth": ground_truth,
-            "predicted_text": None,
-            "cer": None,
-            "wer": None,
-            "semantic_error": None,
-            "kl_divergence": None,
-            "entropy": None,
-            "mean_gt_rank": None,
-            "top5_accuracy": None,
-            "inference_time": None,
-            "logprobs": None,
-            "mean_logprob": None,
-            "confidence": None,
-            "error": None
-        }
-
+    
+    async with semaphore:
         try:
             # Encode PIL image to base64
             buf = io.BytesIO()
@@ -172,41 +192,24 @@ def _run_evaluation(api_key: str, test_images: List, test_labels: List, top_logp
 
             # Call API via Portkey
             start_time = time.time()
-            response = requests.post(
+            async with session.post(
                 "https://api.portkey.ai/v1/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=60
-            )
-            inference_time = time.time() - start_time
+                timeout=aiohttp.ClientTimeout(total=60)
+            ) as response:
+                inference_time = time.time() - start_time
+                
+                if response.status != 200:
+                    text = await response.text()
+                    raise Exception(f"API error: {response.status} - {text}")
 
-            if response.status_code != 200:
-                raise Exception(f"API error: {response.status_code} - {response.text}")
+                response_data = await response.json()
 
-            response_data = response.json()
             predicted_text = response_data["choices"][0]["message"]["content"].strip()
 
-            # Extract logprobs (OpenAI format: choices[0].logprobs.content)
-            logprobs_data = None
-            raw_logprobs = response_data["choices"][0].get("logprobs", {})
-            if raw_logprobs and raw_logprobs.get("content"):
-                logprobs_data = []
-                for token_info in raw_logprobs["content"]:
-                    chosen_logprob = token_info.get("logprob")
-                    token_entry = {
-                        "token": token_info.get("token", ""),
-                        "logprob": chosen_logprob,
-                        "prob": math.exp(chosen_logprob) if chosen_logprob is not None else None,
-                        "top_tokens": []
-                    }
-                    for top in token_info.get("top_logprobs", []):
-                        top_logprob = top.get("logprob")
-                        token_entry["top_tokens"].append({
-                            "token": top.get("token", ""),
-                            "logprob": top_logprob,
-                            "prob": math.exp(top_logprob) if top_logprob is not None else None
-                        })
-                    logprobs_data.append(token_entry)
+            # Extract logprobs
+            logprobs_data = _extract_logprobs(response_data)
 
             # Calculate mean logprob and confidence
             mean_logprob = None
@@ -237,24 +240,239 @@ def _run_evaluation(api_key: str, test_images: List, test_labels: List, top_logp
             result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
             result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
 
-            cer_values.append(cer)
-            wer_values.append(wer)
-            inference_times.append(inference_time)
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
+            result["error"] = str(e)
+    
+    return result
 
-            if (idx + 1) % 10 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{num_samples} samples")
+
+def _extract_logprobs(response_data: Dict) -> Optional[List[Dict]]:
+    """Extract logprobs from OpenAI response format."""
+    raw_logprobs = response_data["choices"][0].get("logprobs", {})
+    if not raw_logprobs or not raw_logprobs.get("content"):
+        return None
+    
+    logprobs_data = []
+    for token_info in raw_logprobs["content"]:
+        chosen_logprob = token_info.get("logprob")
+        token_entry = {
+            "token": token_info.get("token", ""),
+            "logprob": chosen_logprob,
+            "prob": math.exp(chosen_logprob) if chosen_logprob is not None else None,
+            "top_tokens": []
+        }
+        for top in token_info.get("top_logprobs", []):
+            top_logprob = top.get("logprob")
+            token_entry["top_tokens"].append({
+                "token": top.get("token", ""),
+                "logprob": top_logprob,
+                "prob": math.exp(top_logprob) if top_logprob is not None else None
+            })
+        logprobs_data.append(token_entry)
+    return logprobs_data
+
+
+async def _run_evaluation_async(
+    api_key: str, 
+    test_images: List, 
+    test_labels: List, 
+    top_logprobs: int = 5
+) -> Dict[str, Any]:
+    """
+    Run evaluation on test set via Portkey → OpenAI using async requests.
+
+    Args:
+        api_key: Portkey API key
+        test_images: List of PIL Image objects
+        test_labels: List of ground truth text labels
+        top_logprobs: Number of top alternative tokens to request
+
+    Returns:
+        Dictionary of aggregated metrics
+    """
+    headers = {
+        "x-portkey-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    num_samples = len(test_images)
+    
+    log_info(MODEL_NAME, f"Starting async evaluation with {MAX_CONCURRENT_REQUESTS} concurrent requests")
+    
+    # Semaphore to limit concurrent requests
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            _process_single_image(
+                session, semaphore, idx, pil_image, ground_truth,
+                headers, prompt, top_logprobs
+            )
+            for idx, (pil_image, ground_truth) in enumerate(zip(test_images, test_labels))
+        ]
+        
+        # Use tqdm for progress bar if available
+        if atqdm is not None:
+            results = await atqdm.gather(
+                *tasks,
+                desc=f"{MODEL_NAME}",
+                total=num_samples,
+                unit="img"
+            )
+        else:
+            results = await asyncio.gather(*tasks)
+    
+    # Sort results by index to maintain order
+    results = sorted(results, key=lambda x: x["index"])
+    
+    # Save JSONL results
+    save_results_jsonl(MODEL_NAME, results)
+    
+    # Aggregate metrics
+    return _aggregate_metrics(results, num_samples)
+
+
+def _run_evaluation_sync(
+    api_key: str, 
+    test_images: List, 
+    test_labels: List, 
+    top_logprobs: int = 5
+) -> Dict[str, Any]:
+    """
+    Run evaluation on test set via Portkey → OpenAI (synchronous fallback).
+
+    Args:
+        api_key: Portkey API key
+        test_images: List of PIL Image objects
+        test_labels: List of ground truth text labels
+        top_logprobs: Number of top alternative tokens to request
+
+    Returns:
+        Dictionary of aggregated metrics
+    """
+    results = []
+    headers = {
+        "x-portkey-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    num_samples = len(test_images)
+    
+    log_info(MODEL_NAME, "Running sync evaluation (install aiohttp for faster async)")
+
+    # Use tqdm if available
+    iterator = zip(test_images, test_labels)
+    if tqdm is not None:
+        iterator = tqdm(
+            iterator, 
+            desc=f"{MODEL_NAME}", 
+            total=num_samples, 
+            unit="img"
+        )
+
+    for idx, (pil_image, ground_truth) in enumerate(iterator):
+        result = {
+            "index": idx,
+            "ground_truth": ground_truth,
+            "predicted_text": None,
+            "cer": None,
+            "wer": None,
+            "semantic_error": None,
+            "kl_divergence": None,
+            "entropy": None,
+            "mean_gt_rank": None,
+            "top5_accuracy": None,
+            "inference_time": None,
+            "logprobs": None,
+            "mean_logprob": None,
+            "confidence": None,
+            "error": None
+        }
+
+        try:
+            # Encode PIL image to base64
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_data = base64.b64encode(buf.getvalue()).decode()
+
+            payload = {
+                "model": MODEL_ID,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 1024,
+                "logprobs": True,
+                "top_logprobs": top_logprobs
+            }
+
+            start_time = time.time()
+            response = requests.post(
+                "https://api.portkey.ai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            inference_time = time.time() - start_time
+
+            if response.status_code != 200:
+                raise Exception(f"API error: {response.status_code} - {response.text}")
+
+            response_data = response.json()
+            predicted_text = response_data["choices"][0]["message"]["content"].strip()
+            logprobs_data = _extract_logprobs(response_data)
+
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    confidence = math.exp(mean_logprob) * 100
+
+            cer = character_error_rate(ground_truth, predicted_text)
+            wer = word_error_rate(ground_truth, predicted_text)
+            semantic_metrics = get_semantic_error(logprobs_data, ground_truth, predicted_text)
+
+            result["predicted_text"] = predicted_text
+            result["cer"] = cer
+            result["wer"] = wer
+            result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
+            result["semantic_error"] = semantic_metrics.get("semantic_error")
+            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
+            result["entropy"] = semantic_metrics.get("entropy")
+            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
+            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
 
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
             result["error"] = str(e)
-            num_errors += 1
 
         results.append(result)
 
-    # Save JSONL results
     save_results_jsonl(MODEL_NAME, results)
+    return _aggregate_metrics(results, num_samples)
 
-    # Calculate aggregated metrics
+
+def _aggregate_metrics(results: List[Dict], num_samples: int) -> Dict[str, Any]:
+    """Aggregate metrics from individual results."""
+    cer_values = [r["cer"] for r in results if r.get("cer") is not None]
+    wer_values = [r["wer"] for r in results if r.get("wer") is not None]
+    inference_times = [r["inference_time"] for r in results if r.get("inference_time") is not None]
+    num_errors = sum(1 for r in results if r.get("error") is not None)
+
     metrics = {
         "num_samples": num_samples,
         "num_successful": num_samples - num_errors,

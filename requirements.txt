@@ -5,6 +5,8 @@ opencv-python
 pillow
 scipy
 python-dotenv
+aiohttp
+tqdm
 
 # OCR/HTR Models
 pytesseract
