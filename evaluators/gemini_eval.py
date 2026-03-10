@@ -1,8 +1,10 @@
 """
 evaluators/gemini_eval.py
 Google Gemini (direct Google API) OCR evaluator with logprobs and tokenizer support
+Uses async requests for faster evaluation.
 """
 
+import asyncio
 import time
 import os
 import math
@@ -12,6 +14,18 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from PIL import Image
 import io
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
 
 try:
     import requests
@@ -31,6 +45,13 @@ try:
 except ImportError:
     load_from_disk = None
 
+try:
+    from tqdm import tqdm
+    from tqdm.asyncio import tqdm as atqdm
+except ImportError:
+    tqdm = None
+    atqdm = None
+
 from .utils import (
     get_data_dir, get_results_dir, load_iam_data,
     character_error_rate, word_error_rate,
@@ -41,10 +62,13 @@ from .utils import (
 MODEL_NAME = "gemini-3-pro-preview"
 MODEL_ID = "gemini-3-pro-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+MAX_CONCURRENT_REQUESTS = 10  # Adjust based on rate limits
 
 def check_dependencies():
     """Check if required packages are installed"""
-    return REQUESTS_AVAILABLE and GENAI_AVAILABLE
+    if not AIOHTTP_AVAILABLE:
+        log_warning(MODEL_NAME, "aiohttp not installed, falling back to sync requests")
+    return (REQUESTS_AVAILABLE or AIOHTTP_AVAILABLE) and GENAI_AVAILABLE
 
 def get_google_api_key():
     """Get Google API key from environment"""
@@ -122,8 +146,11 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
         log_warning(MODEL_NAME, "No test images found")
         return {"error": "No test data"}
     
-    # Run evaluation
-    metrics = _run_evaluation(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs)
+    # Run evaluation (async if aiohttp available, else sync)
+    if AIOHTTP_AVAILABLE:
+        metrics = asyncio.run(_run_evaluation_async(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs))
+    else:
+        metrics = _run_evaluation_sync(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs)
     
     # Save results
     save_metrics(MODEL_NAME, metrics)
@@ -132,9 +159,210 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     log_info(MODEL_NAME, "Evaluation complete")
     return metrics
 
-def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
+
+async def _process_single_image(
+    session: "aiohttp.ClientSession",
+    semaphore: asyncio.Semaphore,
+    idx: int,
+    pil_image,
+    ground_truth: str,
+    api_url: str,
+    google_api_key: str,
+    prompt: str,
+    top_logprobs: int,
+    tokenizer_model
+) -> Dict[str, Any]:
     """
-    Run evaluation on test set calling Google Gemini API directly.
+    Process a single image asynchronously.
+    
+    Args:
+        session: aiohttp session
+        semaphore: Semaphore to limit concurrency
+        idx: Image index
+        pil_image: PIL Image object
+        ground_truth: Ground truth text
+        api_url: Gemini API URL
+        google_api_key: Google API key
+        prompt: OCR prompt
+        top_logprobs: Number of top logprobs to request
+        tokenizer_model: Gemini tokenizer model
+    
+    Returns:
+        Result dictionary for this image
+    """
+    result = {
+        "index": idx,
+        "ground_truth": ground_truth,
+        "predicted_text": None,
+        "cer": None,
+        "wer": None,
+        "semantic_error": None,
+        "kl_divergence": None,
+        "entropy": None,
+        "mean_gt_rank": None,
+        "top5_accuracy": None,
+        "inference_time": None,
+        "logprobs": None,
+        "mean_logprob": None,
+        "confidence": None,
+        "error": None
+    }
+    
+    async with semaphore:
+        try:
+            # Encode PIL image to base64
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_data = base64.b64encode(buf.getvalue()).decode()
+            
+            # Build native Gemini REST payload with logprobs enabled
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": image_data
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "maxOutputTokens": 1024,
+                    "responseLogprobs": True,
+                    "logprobs": top_logprobs
+                }
+            }
+            
+            # Call Google Gemini API directly
+            start_time = time.time()
+            async with session.post(
+                api_url,
+                json=payload,
+                params={"key": google_api_key},
+                timeout=aiohttp.ClientTimeout(total=60)
+            ) as response:
+                inference_time = time.time() - start_time
+                
+                if response.status != 200:
+                    text = await response.text()
+                    raise Exception(f"API error {response.status}: {text}")
+                
+                response_data = await response.json()
+            
+            # Extract text response from native Gemini format
+            predicted_text = ""
+            candidates = response_data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    predicted_text = parts[0].get("text", "").strip()
+            
+            # Extract logprobs from response
+            logprobs_data = _extract_logprobs_from_response(response_data)
+            
+            # Calculate mean logprob and confidence
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    confidence = math.exp(mean_logprob) * 100
+            
+            # Calculate metrics
+            cer = character_error_rate(ground_truth, predicted_text)
+            wer = word_error_rate(ground_truth, predicted_text)
+            semantic_metrics = get_semantic_error(
+                logprobs_data, ground_truth, predicted_text, 
+                tokenizer_model=tokenizer_model
+            )
+            
+            result["predicted_text"] = predicted_text
+            result["cer"] = cer
+            result["wer"] = wer
+            result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
+            result["semantic_error"] = semantic_metrics.get("semantic_error")
+            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
+            result["entropy"] = semantic_metrics.get("entropy")
+            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
+            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
+            result["error"] = str(e)
+    
+    return result
+
+
+async def _run_evaluation_async(
+    google_api_key: str, 
+    test_images: List, 
+    test_labels: List, 
+    tokenizer_model, 
+    top_logprobs: int = 5
+) -> Dict[str, Any]:
+    """
+    Run evaluation on test set calling Google Gemini API directly using async requests.
+    
+    Args:
+        google_api_key: Google API key
+        test_images: List of PIL Image objects
+        test_labels: List of ground truth text labels
+        tokenizer_model: Gemini client for tokenization (optional)
+        top_logprobs: Number of top alternative tokens to return
+    
+    Returns:
+        Dictionary of metrics
+    """
+    api_url = GEMINI_API_URL.format(model=MODEL_ID)
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    num_samples = len(test_images)
+    
+    log_info(MODEL_NAME, f"Starting async evaluation with {MAX_CONCURRENT_REQUESTS} concurrent requests")
+    
+    # Semaphore to limit concurrent requests
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            _process_single_image(
+                session, semaphore, idx, pil_image, ground_truth,
+                api_url, google_api_key, prompt, top_logprobs, tokenizer_model
+            )
+            for idx, (pil_image, ground_truth) in enumerate(zip(test_images, test_labels))
+        ]
+        
+        # Use tqdm for progress bar if available
+        if atqdm is not None:
+            results = await atqdm.gather(
+                *tasks,
+                desc=f"{MODEL_NAME}",
+                total=num_samples,
+                unit="img"
+            )
+        else:
+            results = await asyncio.gather(*tasks)
+    
+    # Sort results by index to maintain order
+    results = sorted(results, key=lambda x: x["index"])
+    
+    # Save JSONL results
+    save_results_jsonl(MODEL_NAME, results)
+    
+    # Aggregate metrics
+    return _aggregate_metrics(results, num_samples)
+
+
+def _run_evaluation_sync(google_api_key: str, test_images: List, test_labels: List, tokenizer_model, top_logprobs: int = 5) -> Dict[str, Any]:
+    """
+    Run evaluation on test set calling Google Gemini API directly (synchronous fallback).
     
     Args:
         google_api_key: Google API key
@@ -147,10 +375,6 @@ def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, t
         Dictionary of metrics
     """
     results = []
-    cer_values = []
-    wer_values = []
-    inference_times = []
-    num_errors = 0
     
     api_url = GEMINI_API_URL.format(model=MODEL_ID)
     headers = {"Content-Type": "application/json"}
@@ -158,7 +382,13 @@ def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, t
     prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
     
     num_samples = len(test_images)
-    for idx, (pil_image, ground_truth) in enumerate(zip(test_images, test_labels)):
+    
+    # Create iterator with tqdm progress bar if available
+    iterator = enumerate(zip(test_images, test_labels))
+    if tqdm is not None:
+        iterator = tqdm(iterator, desc=f"{MODEL_NAME} (sync)", total=num_samples, unit="img")
+    
+    for idx, (pil_image, ground_truth) in iterator:
         result = {
             "index": idx,
             "ground_truth": ground_truth,
@@ -262,25 +492,61 @@ def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, t
             result["entropy"] = semantic_metrics.get("entropy")
             result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
             result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
-            
-            cer_values.append(cer)
-            wer_values.append(wer)
-            inference_times.append(inference_time)
-            
-            if (idx + 1) % 10 == 0:
-                log_info(MODEL_NAME, f"Processed {idx + 1}/{num_samples} samples")
         
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
             result["error"] = str(e)
-            num_errors += 1
         
         results.append(result)
     
     # Save JSONL results
     save_results_jsonl(MODEL_NAME, results)
     
-    # Calculate aggregated metrics
+    # Aggregate and return metrics
+    return _aggregate_metrics(results, num_samples)
+
+def _aggregate_metrics(results: List[Dict[str, Any]], num_samples: int) -> Dict[str, Any]:
+    """
+    Aggregate individual results into summary metrics.
+    
+    Args:
+        results: List of result dictionaries from processing
+        num_samples: Total number of samples
+    
+    Returns:
+        Dictionary of aggregated metrics
+    """
+    cer_values = []
+    wer_values = []
+    inference_times = []
+    semantic_errors = []
+    kl_divergences = []
+    entropies = []
+    mean_gt_ranks = []
+    top5_accuracies = []
+    num_errors = 0
+    
+    for r in results:
+        if r.get("error"):
+            num_errors += 1
+        else:
+            if r.get("cer") is not None:
+                cer_values.append(r["cer"])
+            if r.get("wer") is not None:
+                wer_values.append(r["wer"])
+            if r.get("inference_time") is not None:
+                inference_times.append(r["inference_time"])
+            if r.get("semantic_error") is not None:
+                semantic_errors.append(r["semantic_error"])
+            if r.get("kl_divergence") is not None:
+                kl_divergences.append(r["kl_divergence"])
+            if r.get("entropy") is not None:
+                entropies.append(r["entropy"])
+            if r.get("mean_gt_rank") is not None:
+                mean_gt_ranks.append(r["mean_gt_rank"])
+            if r.get("top5_accuracy") is not None:
+                top5_accuracies.append(r["top5_accuracy"])
+    
     metrics = {
         "num_samples": num_samples,
         "num_successful": num_samples - num_errors,
@@ -312,7 +578,19 @@ def _run_evaluation(google_api_key: str, test_images: List, test_labels: List, t
         metrics["mean_inference_time"] = None
         metrics["total_inference_time"] = None
     
+    if semantic_errors:
+        metrics["mean_semantic_error"] = sum(semantic_errors) / len(semantic_errors)
+    if kl_divergences:
+        metrics["mean_kl_divergence"] = sum(kl_divergences) / len(kl_divergences)
+    if entropies:
+        metrics["mean_entropy"] = sum(entropies) / len(entropies)
+    if mean_gt_ranks:
+        metrics["mean_gt_rank"] = sum(mean_gt_ranks) / len(mean_gt_ranks)
+    if top5_accuracies:
+        metrics["mean_top5_accuracy"] = sum(top5_accuracies) / len(top5_accuracies)
+    
     return metrics
+
 
 def _extract_logprobs_from_response(response_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """
