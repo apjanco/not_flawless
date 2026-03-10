@@ -54,7 +54,11 @@ MODEL_NAME = "claude-vision"
 MODEL_ID = "claude-opus-4-6"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_CONCURRENT_REQUESTS = 10
+
+# Rate limiting configuration
+MAX_REQUESTS_PER_MINUTE = 50
+MAX_CONCURRENT_REQUESTS = 10  # Process 10 at a time within rate limit
+BATCH_SIZE = 50  # Process 50, then checkpoint and wait if needed
 
 def check_dependencies():
     """Check if required packages are installed"""
@@ -390,20 +394,35 @@ async def _run_evaluation_async_with_checkpointing(
     
     num_samples = len(test_images)
     today = time.strftime('%Y-%m-%d')
-    batch_size = 50  # Process 50 images concurrently, then checkpoint
     
     all_new_results = []
+    batch_start_time = time.time()
+    requests_this_minute = 0
     
-    log_info(MODEL_NAME, f"Starting async evaluation with batch size {batch_size}")
+    log_info(MODEL_NAME, f"Starting async evaluation with rate limit {MAX_REQUESTS_PER_MINUTE} RPM")
     
     # Process in batches
-    for batch_start in range(0, num_samples, batch_size):
-        batch_end = min(batch_start + batch_size, num_samples)
+    for batch_start in range(0, num_samples, BATCH_SIZE):
+        # Rate limiting: check if we need to wait before this batch
+        elapsed = time.time() - batch_start_time
+        if elapsed < 60 and requests_this_minute + min(BATCH_SIZE, num_samples - batch_start) > MAX_REQUESTS_PER_MINUTE:
+            wait_time = 60 - elapsed + 0.5
+            log_info(MODEL_NAME, f"Rate limit: waiting {wait_time:.1f}s before next batch...")
+            await asyncio.sleep(wait_time)
+            batch_start_time = time.time()
+            requests_this_minute = 0
+        elif elapsed >= 60:
+            # Reset counter for new minute
+            batch_start_time = time.time()
+            requests_this_minute = 0
+        batch_end = min(batch_start + BATCH_SIZE, num_samples)
         batch_indices = indices[batch_start:batch_end]
         batch_images = test_images[batch_start:batch_end]
         batch_labels = test_labels[batch_start:batch_end]
         
-        log_info(MODEL_NAME, f"Processing batch {batch_start//batch_size + 1}: samples {batch_start+1}-{batch_end} of {num_samples}")
+        log_info(MODEL_NAME, f"Processing batch {batch_start//BATCH_SIZE + 1}: samples {batch_start+1}-{batch_end} of {num_samples}")
+        
+        requests_this_minute += len(batch_indices)
         
         # Semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
@@ -421,7 +440,7 @@ async def _run_evaluation_async_with_checkpointing(
             if atqdm is not None:
                 batch_results = await atqdm.gather(
                     *tasks,
-                    desc=f"{MODEL_NAME} batch {batch_start//batch_size + 1}",
+                    desc=f"{MODEL_NAME} batch {batch_start//BATCH_SIZE + 1}",
                     total=len(tasks),
                     unit="img"
                 )
