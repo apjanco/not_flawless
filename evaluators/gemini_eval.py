@@ -62,13 +62,86 @@ from .utils import (
 MODEL_NAME = "gemini-3-pro-preview"
 MODEL_ID = "gemini-3-pro-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-MAX_CONCURRENT_REQUESTS = 10  # Adjust based on rate limits
+
+# Rate limiting configuration
+MAX_REQUESTS_PER_MINUTE = 25
+MAX_REQUESTS_PER_DAY = 250
+MAX_CONCURRENT_REQUESTS = 5  # Conservative to stay under RPM limit
+REQUEST_DELAY = 60.0 / MAX_REQUESTS_PER_MINUTE  # ~2.4 seconds between requests
 
 def check_dependencies():
     """Check if required packages are installed"""
     if not AIOHTTP_AVAILABLE:
         log_warning(MODEL_NAME, "aiohttp not installed, falling back to sync requests")
     return (REQUESTS_AVAILABLE or AIOHTTP_AVAILABLE) and GENAI_AVAILABLE
+
+
+def _get_checkpoint_path() -> Path:
+    """Get path to checkpoint file."""
+    results_dir = get_results_dir()
+    return results_dir / f"{MODEL_NAME}_checkpoint.json"
+
+
+def _load_checkpoint() -> Dict[str, Any]:
+    """
+    Load checkpoint from disk.
+    
+    Returns:
+        Dictionary with 'completed_indices' (set of processed indices),
+        'results' (list of results), and 'last_run_date' (date string).
+    """
+    checkpoint_path = _get_checkpoint_path()
+    if checkpoint_path.exists():
+        try:
+            with open(checkpoint_path, 'r') as f:
+                data = json.load(f)
+            # Convert list back to set for efficient lookup
+            data['completed_indices'] = set(data.get('completed_indices', []))
+            log_info(MODEL_NAME, f"Loaded checkpoint: {len(data['completed_indices'])} samples already processed")
+            return data
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Failed to load checkpoint: {e}")
+    return {'completed_indices': set(), 'results': [], 'last_run_date': None}
+
+
+def _save_checkpoint(completed_indices: set, results: List[Dict], run_date: str):
+    """
+    Save checkpoint to disk.
+    
+    Args:
+        completed_indices: Set of indices that have been processed
+        results: List of result dictionaries
+        run_date: Date string of current run
+    """
+    checkpoint_path = _get_checkpoint_path()
+    try:
+        data = {
+            'completed_indices': list(completed_indices),
+            'results': results,
+            'last_run_date': run_date,
+            'total_processed': len(completed_indices)
+        }
+        with open(checkpoint_path, 'w') as f:
+            json.dump(data, f)
+        log_info(MODEL_NAME, f"Checkpoint saved: {len(completed_indices)} samples processed")
+    except Exception as e:
+        log_warning(MODEL_NAME, f"Failed to save checkpoint: {e}")
+
+
+def _get_daily_request_count() -> int:
+    """
+    Get number of requests made today from checkpoint.
+    
+    Returns:
+        Number of requests made today, or 0 if new day.
+    """
+    checkpoint = _load_checkpoint()
+    today = time.strftime('%Y-%m-%d')
+    if checkpoint.get('last_run_date') == today:
+        # Same day - count requests made today
+        return len([r for r in checkpoint.get('results', []) 
+                    if r.get('run_date') == today])
+    return 0
 
 def get_google_api_key():
     """Get Google API key from environment"""
@@ -100,13 +173,17 @@ def get_gemini_tokenizer():
         log_warning(MODEL_NAME, f"Failed to initialize Gemini tokenizer: {str(e)}")
         return None
 
-def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
+def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int = None) -> Dict[str, Any]:
     """
-    Main evaluation function using Portkey API
+    Main evaluation function with checkpointing and rate limiting.
+    
+    Supports incremental evaluation - run once per day to process up to 250 samples.
+    Progress is saved to checkpoint file and resumes from where it left off.
     
     Args:
         project_root: Path to project root
         top_logprobs: Number of top alternative tokens to return (1-20)
+        max_requests: Maximum requests for this run (default: MAX_REQUESTS_PER_DAY)
     
     Returns:
         Dictionary of evaluation metrics
@@ -146,18 +223,263 @@ def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
         log_warning(MODEL_NAME, "No test images found")
         return {"error": "No test data"}
     
-    # Run evaluation (async if aiohttp available, else sync)
-    if AIOHTTP_AVAILABLE:
-        metrics = asyncio.run(_run_evaluation_async(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs))
-    else:
-        metrics = _run_evaluation_sync(google_api_key, test_images, test_labels, tokenizer_model, top_logprobs)
+    # Load checkpoint to resume from previous run
+    checkpoint = _load_checkpoint()
+    completed_indices = checkpoint['completed_indices']
+    existing_results = checkpoint['results']
+    
+    # Determine how many requests we can make
+    if max_requests is None:
+        max_requests = MAX_REQUESTS_PER_DAY
+    
+    # Calculate remaining quota
+    remaining_indices = [i for i in range(len(test_images)) if i not in completed_indices]
+    requests_to_make = min(len(remaining_indices), max_requests)
+    
+    if not remaining_indices:
+        log_info(MODEL_NAME, "All samples already processed! Generating final metrics.")
+        metrics = _aggregate_metrics(existing_results, len(test_images))
+        save_metrics(MODEL_NAME, metrics)
+        append_metrics_csv(MODEL_NAME, metrics)
+        return metrics
+    
+    log_info(MODEL_NAME, f"Progress: {len(completed_indices)}/{len(test_images)} samples completed")
+    log_info(MODEL_NAME, f"Will process {requests_to_make} samples this run (daily limit: {MAX_REQUESTS_PER_DAY})")
+    
+    # Select samples to process this run
+    indices_to_process = remaining_indices[:requests_to_make]
+    images_to_process = [test_images[i] for i in indices_to_process]
+    labels_to_process = [test_labels[i] for i in indices_to_process]
+    
+    # Run evaluation (sync only for rate limiting control)
+    new_results = _run_evaluation_with_checkpointing(
+        google_api_key, images_to_process, labels_to_process,
+        indices_to_process, tokenizer_model, top_logprobs,
+        completed_indices, existing_results
+    )
+    
+    # Merge results
+    all_results = existing_results + new_results
+    completed_indices.update(r['index'] for r in new_results if not r.get('error'))
+    
+    # Save final checkpoint
+    today = time.strftime('%Y-%m-%d')
+    _save_checkpoint(completed_indices, all_results, today)
+    
+    # Generate metrics
+    metrics = _aggregate_metrics(all_results, len(test_images))
+    metrics['checkpoint_info'] = {
+        'total_samples': len(test_images),
+        'processed_samples': len(completed_indices),
+        'remaining_samples': len(test_images) - len(completed_indices),
+        'is_complete': len(completed_indices) >= len(test_images)
+    }
     
     # Save results
     save_metrics(MODEL_NAME, metrics)
     append_metrics_csv(MODEL_NAME, metrics)
+    save_results_jsonl(MODEL_NAME, all_results)
     
-    log_info(MODEL_NAME, "Evaluation complete")
+    log_info(MODEL_NAME, f"Evaluation run complete. Progress: {len(completed_indices)}/{len(test_images)}")
+    if len(completed_indices) < len(test_images):
+        log_info(MODEL_NAME, f"Run again tomorrow to continue ({len(test_images) - len(completed_indices)} samples remaining)")
+    
     return metrics
+
+
+def _run_evaluation_with_checkpointing(
+    google_api_key: str,
+    test_images: List,
+    test_labels: List,
+    indices: List[int],
+    tokenizer_model,
+    top_logprobs: int,
+    completed_indices: set,
+    existing_results: List[Dict]
+) -> List[Dict[str, Any]]:
+    """
+    Run evaluation with rate limiting and incremental checkpointing.
+    
+    Processes images one at a time with delays to respect rate limits,
+    saving checkpoint after each successful request.
+    
+    Args:
+        google_api_key: Google API key
+        test_images: List of PIL Image objects to process
+        test_labels: List of ground truth text labels
+        indices: Original indices of these samples in full dataset
+        tokenizer_model: Gemini client for tokenization
+        top_logprobs: Number of top alternative tokens to return
+        completed_indices: Set of already completed indices (for checkpoint)
+        existing_results: Existing results from checkpoint
+    
+    Returns:
+        List of new result dictionaries
+    """
+    results = []
+    api_url = GEMINI_API_URL.format(model=MODEL_ID)
+    headers = {"Content-Type": "application/json"}
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    
+    num_samples = len(test_images)
+    today = time.strftime('%Y-%m-%d')
+    
+    # Track timing for rate limiting
+    request_times = []
+    
+    # Create iterator with tqdm progress bar if available
+    iterator = enumerate(zip(indices, test_images, test_labels))
+    if tqdm is not None:
+        iterator = tqdm(iterator, desc=f"{MODEL_NAME}", total=num_samples, unit="img")
+    
+    for batch_idx, (original_idx, pil_image, ground_truth) in iterator:
+        result = {
+            "index": original_idx,
+            "ground_truth": ground_truth,
+            "predicted_text": None,
+            "cer": None,
+            "wer": None,
+            "semantic_error": None,
+            "kl_divergence": None,
+            "entropy": None,
+            "mean_gt_rank": None,
+            "top5_accuracy": None,
+            "inference_time": None,
+            "logprobs": None,
+            "mean_logprob": None,
+            "confidence": None,
+            "error": None,
+            "run_date": today
+        }
+        
+        # Rate limiting: ensure we don't exceed 25 requests per minute
+        current_time = time.time()
+        # Remove timestamps older than 60 seconds
+        request_times = [t for t in request_times if current_time - t < 60]
+        
+        if len(request_times) >= MAX_REQUESTS_PER_MINUTE:
+            # Wait until oldest request is 60 seconds old
+            wait_time = 60 - (current_time - request_times[0]) + 0.1
+            if wait_time > 0:
+                log_info(MODEL_NAME, f"Rate limit reached, waiting {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                request_times = request_times[1:]  # Remove oldest
+        
+        try:
+            # Encode PIL image to base64
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_data = base64.b64encode(buf.getvalue()).decode()
+            
+            # Build native Gemini REST payload with logprobs enabled
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": image_data
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "maxOutputTokens": 1024,
+                    "responseLogprobs": True,
+                    "logprobs": top_logprobs
+                }
+            }
+            
+            # Call Google Gemini API directly
+            start_time = time.time()
+            response = requests.post(
+                api_url,
+                json=payload,
+                headers=headers,
+                params={"key": google_api_key},
+                timeout=60
+            )
+            inference_time = time.time() - start_time
+            request_times.append(time.time())
+            
+            if response.status_code == 429:
+                # Rate limited - wait and retry once
+                log_warning(MODEL_NAME, "Rate limited (429), waiting 60s before retry...")
+                time.sleep(60)
+                response = requests.post(
+                    api_url,
+                    json=payload,
+                    headers=headers,
+                    params={"key": google_api_key},
+                    timeout=60
+                )
+                inference_time = time.time() - start_time
+                request_times.append(time.time())
+            
+            if response.status_code != 200:
+                raise Exception(f"API error {response.status_code}: {response.text}")
+            
+            response_data = response.json()
+            
+            # Extract text response from native Gemini format
+            predicted_text = ""
+            candidates = response_data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    predicted_text = parts[0].get("text", "").strip()
+            
+            # Extract logprobs from response
+            logprobs_data = _extract_logprobs_from_response(response_data)
+            
+            # Calculate mean logprob and confidence
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    confidence = math.exp(mean_logprob) * 100
+            
+            # Calculate metrics
+            cer = character_error_rate(ground_truth, predicted_text)
+            wer = word_error_rate(ground_truth, predicted_text)
+            semantic_metrics = get_semantic_error(
+                logprobs_data, ground_truth, predicted_text,
+                tokenizer_model=tokenizer_model
+            )
+            
+            result["predicted_text"] = predicted_text
+            result["cer"] = cer
+            result["wer"] = wer
+            result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
+            result["semantic_error"] = semantic_metrics.get("semantic_error")
+            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
+            result["entropy"] = semantic_metrics.get("entropy")
+            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
+            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            
+            # Update completed indices and save checkpoint incrementally
+            completed_indices.add(original_idx)
+            
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Error processing sample {original_idx}: {str(e)}")
+            result["error"] = str(e)
+        
+        results.append(result)
+        
+        # Save checkpoint every 10 samples or on last sample
+        if (batch_idx + 1) % 10 == 0 or batch_idx == num_samples - 1:
+            all_results = existing_results + results
+            _save_checkpoint(completed_indices, all_results, today)
+    
+    return results
 
 
 async def _process_single_image(
