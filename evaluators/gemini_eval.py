@@ -60,12 +60,12 @@ from .utils import (
 )
 
 MODEL_NAME = "gemini-3-pro-preview"
-MODEL_ID = "gemini-3-pro-preview"
+MODEL_ID = "gemini-1.5-pro"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 # Rate limiting configuration
 MAX_REQUESTS_PER_MINUTE = 25
-MAX_REQUESTS_PER_DAY = 250
+MAX_REQUESTS_PER_DAY = 225
 MAX_CONCURRENT_REQUESTS = 5  # Conservative to stay under RPM limit
 REQUEST_DELAY = 60.0 / MAX_REQUESTS_PER_MINUTE  # ~2.4 seconds between requests
 
