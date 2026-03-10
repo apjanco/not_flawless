@@ -190,12 +190,19 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
     images_to_process = [test_images[i] for i in indices_to_process]
     labels_to_process = [test_labels[i] for i in indices_to_process]
     
-    # Run evaluation with checkpointing
-    new_results = _run_evaluation_with_checkpointing(
-        api_key, images_to_process, labels_to_process,
-        indices_to_process, top_logprobs,
-        completed_indices, existing_results
-    )
+    # Run evaluation with checkpointing (async if available)
+    if aiohttp is not None:
+        new_results = asyncio.run(_run_evaluation_async_with_checkpointing(
+            api_key, images_to_process, labels_to_process,
+            indices_to_process, top_logprobs,
+            completed_indices, existing_results
+        ))
+    else:
+        new_results = _run_evaluation_with_checkpointing(
+            api_key, images_to_process, labels_to_process,
+            indices_to_process, top_logprobs,
+            completed_indices, existing_results
+        )
     
     # Merge results
     all_results = existing_results + new_results
@@ -384,6 +391,201 @@ def _run_evaluation_with_checkpointing(
             _save_checkpoint(completed_indices, all_results, today)
     
     return results
+
+
+async def _run_evaluation_async_with_checkpointing(
+    api_key: str,
+    test_images: List,
+    test_labels: List,
+    indices: List[int],
+    top_logprobs: int,
+    completed_indices: set,
+    existing_results: List[Dict]
+) -> List[Dict[str, Any]]:
+    """
+    Run async evaluation with batch checkpointing.
+    
+    Processes images in batches concurrently for speed, saving checkpoint
+    after each batch completes.
+    
+    Args:
+        api_key: Portkey API key
+        test_images: List of PIL Image objects to process
+        test_labels: List of ground truth text labels
+        indices: Original indices of these samples in full dataset
+        top_logprobs: Number of top alternative tokens to return
+        completed_indices: Set of already completed indices (for checkpoint)
+        existing_results: Existing results from checkpoint
+    
+    Returns:
+        List of new result dictionaries
+    """
+    headers = {
+        "x-portkey-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
+    
+    num_samples = len(test_images)
+    today = time.strftime('%Y-%m-%d')
+    batch_size = 50  # Process 50 images concurrently, then checkpoint
+    
+    all_new_results = []
+    
+    log_info(MODEL_NAME, f"Starting async evaluation with batch size {batch_size}")
+    
+    # Process in batches
+    for batch_start in range(0, num_samples, batch_size):
+        batch_end = min(batch_start + batch_size, num_samples)
+        batch_indices = indices[batch_start:batch_end]
+        batch_images = test_images[batch_start:batch_end]
+        batch_labels = test_labels[batch_start:batch_end]
+        
+        log_info(MODEL_NAME, f"Processing batch {batch_start//batch_size + 1}: samples {batch_start+1}-{batch_end} of {num_samples}")
+        
+        # Semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                _process_single_image_with_idx(
+                    session, semaphore, original_idx, pil_image, ground_truth,
+                    headers, prompt, top_logprobs, today
+                )
+                for original_idx, pil_image, ground_truth in zip(batch_indices, batch_images, batch_labels)
+            ]
+            
+            # Use tqdm for progress bar if available
+            if atqdm is not None:
+                batch_results = await atqdm.gather(
+                    *tasks,
+                    desc=f"{MODEL_NAME} batch {batch_start//batch_size + 1}",
+                    total=len(tasks),
+                    unit="img"
+                )
+            else:
+                batch_results = await asyncio.gather(*tasks)
+        
+        # Update completed indices and results
+        for r in batch_results:
+            if not r.get('error'):
+                completed_indices.add(r['index'])
+        all_new_results.extend(batch_results)
+        
+        # Save checkpoint after each batch
+        all_results = existing_results + all_new_results
+        _save_checkpoint(completed_indices, all_results, today)
+    
+    return all_new_results
+
+
+async def _process_single_image_with_idx(
+    session: "aiohttp.ClientSession",
+    semaphore: asyncio.Semaphore,
+    idx: int,
+    pil_image,
+    ground_truth: str,
+    headers: Dict[str, str],
+    prompt: str,
+    top_logprobs: int,
+    run_date: str
+) -> Dict[str, Any]:
+    """
+    Process a single image asynchronously with original index preserved.
+    """
+    result = {
+        "index": idx,
+        "ground_truth": ground_truth,
+        "predicted_text": None,
+        "cer": None,
+        "wer": None,
+        "semantic_error": None,
+        "kl_divergence": None,
+        "entropy": None,
+        "mean_gt_rank": None,
+        "top5_accuracy": None,
+        "inference_time": None,
+        "logprobs": None,
+        "mean_logprob": None,
+        "confidence": None,
+        "error": None,
+        "run_date": run_date
+    }
+    
+    async with semaphore:
+        try:
+            # Encode PIL image to base64
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            image_data = base64.b64encode(buf.getvalue()).decode()
+
+            payload = {
+                "model": MODEL_ID,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 1024,
+                "logprobs": True,
+                "top_logprobs": top_logprobs
+            }
+
+            start_time = time.time()
+            async with session.post(
+                "https://api.portkey.ai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=60)
+            ) as response:
+                inference_time = time.time() - start_time
+                
+                if response.status != 200:
+                    text = await response.text()
+                    raise Exception(f"API error: {response.status} - {text}")
+
+                response_data = await response.json()
+
+            predicted_text = response_data["choices"][0]["message"]["content"].strip()
+            logprobs_data = _extract_logprobs(response_data)
+
+            mean_logprob = None
+            confidence = None
+            if logprobs_data:
+                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
+                if logprob_values:
+                    mean_logprob = sum(logprob_values) / len(logprob_values)
+                    confidence = math.exp(mean_logprob) * 100
+
+            cer = character_error_rate(ground_truth, predicted_text)
+            wer = word_error_rate(ground_truth, predicted_text)
+            semantic_metrics = get_semantic_error(logprobs_data, ground_truth, predicted_text)
+
+            result["predicted_text"] = predicted_text
+            result["cer"] = cer
+            result["wer"] = wer
+            result["inference_time"] = inference_time
+            result["logprobs"] = logprobs_data
+            result["mean_logprob"] = mean_logprob
+            result["confidence"] = confidence
+            result["semantic_error"] = semantic_metrics.get("semantic_error")
+            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
+            result["entropy"] = semantic_metrics.get("entropy")
+            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
+            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+
+        except Exception as e:
+            log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
+            result["error"] = str(e)
+    
+    return result
 
 
 async def _process_single_image(
