@@ -50,12 +50,16 @@ def load_jsonl_results(jsonl_path: Path) -> Dict[int, Dict[str, Any]]:
     """
     results = {}
     with open(jsonl_path, 'r', encoding='utf-8') as f:
-        for line in f:
+        for line_num, line in enumerate(f):
             if line.strip():
                 record = json.loads(line)
+                # Try common index key names, fall back to line number
                 idx = record.get("index")
-                if idx is not None:
-                    results[idx] = record
+                if idx is None:
+                    idx = record.get("image_path")
+                if idx is None:
+                    idx = line_num
+                results[idx] = record
     
     return results
 
@@ -118,6 +122,8 @@ def combine_results(
         if results:
             all_results[model_name] = results
             print(f"  [OK] Loaded {len(results)} results from {model_name}")
+        else:
+            print(f"  [WARN] No valid results loaded from {model_name} ({jsonl_path.name})")
     
     if not all_results:
         print("No results loaded!")
