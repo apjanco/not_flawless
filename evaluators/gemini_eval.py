@@ -61,14 +61,8 @@ from .utils import (
 )
 
 MODEL_NAME = "gemini-portkey"
-MODEL_ID = "gemini-1.5-pro"
+MODEL_ID = "gemini-3-pro-preview"
 PORTKEY_API_URL = "https://api.portkey.ai/v1/chat/completions"
-
-# Rate limiting configuration
-MAX_REQUESTS_PER_MINUTE = 25
-MAX_REQUESTS_PER_DAY = 225
-MAX_CONCURRENT_REQUESTS = 5  # Conservative to stay under RPM limit
-REQUEST_DELAY = 60.0 / MAX_REQUESTS_PER_MINUTE  # ~2.4 seconds between requests
 
 def check_dependencies():
     """Check if required packages are installed"""
@@ -182,18 +176,16 @@ def get_gemini_tokenizer():
         log_warning(MODEL_NAME, f"Failed to initialize Gemini tokenizer: {str(e)}")
         return None
 
-def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int = None) -> Dict[str, Any]:
+def evaluate(project_root: str = None, top_logprobs: int = 5) -> Dict[str, Any]:
     """
-    Main evaluation function with checkpointing and rate limiting.
-    
-    Supports incremental evaluation - run once per day to process up to 250 samples.
-    Progress is saved to checkpoint file and resumes from where it left off.
-    
+    Main evaluation function with checkpointing.
+
+    Progress is saved to a checkpoint file and resumes from where it left off.
+
     Args:
         project_root: Path to project root
-        top_logprobs: Number of top alternative tokens to return (1-20) - UNUSED (kept for API compatibility)
-        max_requests: Maximum requests for this run (default: MAX_REQUESTS_PER_DAY)
-    
+        top_logprobs: Unused — kept for API compatibility
+
     Returns:
         Dictionary of evaluation metrics
     """
@@ -233,13 +225,7 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
     completed_indices = checkpoint['completed_indices']
     existing_results = checkpoint['results']
     
-    # Determine how many requests we can make
-    if max_requests is None:
-        max_requests = MAX_REQUESTS_PER_DAY
-    
-    # Calculate remaining quota
     remaining_indices = [i for i in range(len(test_images)) if i not in completed_indices]
-    requests_to_make = min(len(remaining_indices), max_requests)
     
     if not remaining_indices:
         log_info(MODEL_NAME, "All samples already processed! Generating final metrics.")
@@ -249,17 +235,16 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
         return metrics
     
     log_info(MODEL_NAME, f"Progress: {len(completed_indices)}/{len(test_images)} samples completed")
-    log_info(MODEL_NAME, f"Will process {requests_to_make} samples this run (daily limit: {MAX_REQUESTS_PER_DAY})")
+    log_info(MODEL_NAME, f"Will process {len(remaining_indices)} remaining samples")
     
-    # Select samples to process this run
-    indices_to_process = remaining_indices[:requests_to_make]
-    images_to_process = [test_images[i] for i in indices_to_process]
-    labels_to_process = [test_labels[i] for i in indices_to_process]
+    # Process all remaining samples
+    images_to_process = [test_images[i] for i in remaining_indices]
+    labels_to_process = [test_labels[i] for i in remaining_indices]
     
-    # Run evaluation (sync only for rate limiting control)
+    # Run evaluation with checkpointing
     new_results = _run_evaluation_with_checkpointing(
         portkey_key, images_to_process, labels_to_process,
-        indices_to_process, tokenizer_model, top_logprobs,
+        remaining_indices, tokenizer_model, top_logprobs,
         completed_indices, existing_results
     )
     
@@ -285,9 +270,7 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
     append_metrics_csv(MODEL_NAME, metrics)
     save_results_jsonl(MODEL_NAME, all_results)
     
-    log_info(MODEL_NAME, f"Evaluation run complete. Progress: {len(completed_indices)}/{len(test_images)}")
-    if len(completed_indices) < len(test_images):
-        log_info(MODEL_NAME, f"Run again tomorrow to continue ({len(test_images) - len(completed_indices)} samples remaining)")
+    log_info(MODEL_NAME, f"Evaluation complete. Progress: {len(completed_indices)}/{len(test_images)}")
     
     return metrics
 
@@ -331,9 +314,6 @@ def _run_evaluation_with_checkpointing(
     num_samples = len(test_images)
     today = time.strftime('%Y-%m-%d')
     
-    # Track timing for rate limiting
-    request_times = []
-    
     # Create iterator with tqdm progress bar if available
     iterator = enumerate(zip(indices, test_images, test_labels))
     if tqdm is not None:
@@ -358,19 +338,6 @@ def _run_evaluation_with_checkpointing(
             "error": None,
             "run_date": today
         }
-        
-        # Rate limiting: ensure we don't exceed 25 requests per minute
-        current_time = time.time()
-        # Remove timestamps older than 60 seconds
-        request_times = [t for t in request_times if current_time - t < 60]
-        
-        if len(request_times) >= MAX_REQUESTS_PER_MINUTE:
-            # Wait until oldest request is 60 seconds old
-            wait_time = 60 - (current_time - request_times[0]) + 0.1
-            if wait_time > 0:
-                log_info(MODEL_NAME, f"Rate limit reached, waiting {wait_time:.1f}s...")
-                time.sleep(wait_time)
-                request_times = request_times[1:]  # Remove oldest
         
         try:
             # Encode PIL image to base64
