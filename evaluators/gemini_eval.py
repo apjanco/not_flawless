@@ -1,7 +1,8 @@
 """
 evaluators/gemini_eval.py
-Google Gemini (direct Google API) OCR evaluator with logprobs and tokenizer support
+Google Gemini (via Portkey API) OCR evaluator.
 Uses async requests for faster evaluation.
+Note: Logprobs and semantic error analysis are disabled (not supported by Portkey for Gemini).
 """
 
 import asyncio
@@ -59,9 +60,9 @@ from .utils import (
     log_info, log_error, log_warning
 )
 
-MODEL_NAME = "gemini-3-pro-preview"
+MODEL_NAME = "gemini-portkey"
 MODEL_ID = "gemini-1.5-pro"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+PORTKEY_API_URL = "https://api.portkey.ai/v1/chat/completions"
 
 # Rate limiting configuration
 MAX_REQUESTS_PER_MINUTE = 25
@@ -74,6 +75,14 @@ def check_dependencies():
     if not AIOHTTP_AVAILABLE:
         log_warning(MODEL_NAME, "aiohttp not installed, falling back to sync requests")
     return (REQUESTS_AVAILABLE or AIOHTTP_AVAILABLE) and GENAI_AVAILABLE
+
+
+def get_portkey_key():
+    """Get Portkey API key from environment"""
+    api_key = os.getenv("PORTKEY_API_KEY")
+    if not api_key:
+        log_warning(MODEL_NAME, "PORTKEY_API_KEY environment variable not set")
+    return api_key
 
 
 def _get_checkpoint_path() -> Path:
@@ -182,32 +191,28 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
     
     Args:
         project_root: Path to project root
-        top_logprobs: Number of top alternative tokens to return (1-20)
+        top_logprobs: Number of top alternative tokens to return (1-20) - UNUSED (kept for API compatibility)
         max_requests: Maximum requests for this run (default: MAX_REQUESTS_PER_DAY)
     
     Returns:
         Dictionary of evaluation metrics
     """
-    log_info(MODEL_NAME, "Starting Gemini evaluation via Google API (direct)")
+    log_info(MODEL_NAME, "Starting Gemini evaluation via Portkey")
     
     # Check dependencies
     if not check_dependencies():
-        log_error(MODEL_NAME, "requests and/or google-genai not installed")
+        log_error(MODEL_NAME, "requests and/or aiohttp not installed")
         return {"error": "Dependencies not available"}
     
-    # Check GOOGLE_API_KEY (required for both inference and tokenizer)
-    google_api_key = get_google_api_key()
-    if not google_api_key:
-        log_error(MODEL_NAME, "GOOGLE_API_KEY environment variable is REQUIRED but not set")
-        log_error(MODEL_NAME, "Please set: export GOOGLE_API_KEY='your-google-api-key'")
-        return {"error": "GOOGLE_API_KEY not configured - evaluation cannot proceed"}
+    # Check PORTKEY_API_KEY (required)
+    portkey_key = get_portkey_key()
+    if not portkey_key:
+        log_error(MODEL_NAME, "PORTKEY_API_KEY environment variable is REQUIRED but not set")
+        log_error(MODEL_NAME, "Please set: export PORTKEY_API_KEY='your-portkey-key'")
+        return {"error": "PORTKEY_API_KEY not configured - evaluation cannot proceed"}
     
-    # Initialize tokenizer with validated API key
-    tokenizer_model = get_gemini_tokenizer()
-    if not tokenizer_model:
-        log_error(MODEL_NAME, "Failed to initialize Gemini tokenizer")
-        log_error(MODEL_NAME, "Ensure GOOGLE_API_KEY is set correctly and the Gemini API is accessible")
-        return {"error": "Tokenizer initialization failed - evaluation cannot proceed"}
+    # Tokenizer not needed for Portkey (no semantic error analysis)
+    tokenizer_model = None
     
     # Load full IAM dataset from local disk
     try:
@@ -253,7 +258,7 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
     
     # Run evaluation (sync only for rate limiting control)
     new_results = _run_evaluation_with_checkpointing(
-        google_api_key, images_to_process, labels_to_process,
+        portkey_key, images_to_process, labels_to_process,
         indices_to_process, tokenizer_model, top_logprobs,
         completed_indices, existing_results
     )
@@ -288,7 +293,7 @@ def evaluate(project_root: str = None, top_logprobs: int = 5, max_requests: int 
 
 
 def _run_evaluation_with_checkpointing(
-    google_api_key: str,
+    portkey_key: str,
     test_images: List,
     test_labels: List,
     indices: List[int],
@@ -304,12 +309,12 @@ def _run_evaluation_with_checkpointing(
     saving checkpoint after each successful request.
     
     Args:
-        google_api_key: Google API key
+        portkey_key: Portkey API key
         test_images: List of PIL Image objects to process
         test_labels: List of ground truth text labels
         indices: Original indices of these samples in full dataset
-        tokenizer_model: Gemini client for tokenization
-        top_logprobs: Number of top alternative tokens to return
+        tokenizer_model: Unused (kept for API compatibility)
+        top_logprobs: Unused (kept for API compatibility)
         completed_indices: Set of already completed indices (for checkpoint)
         existing_results: Existing results from checkpoint
     
@@ -317,8 +322,10 @@ def _run_evaluation_with_checkpointing(
         List of new result dictionaries
     """
     results = []
-    api_url = GEMINI_API_URL.format(model=MODEL_ID)
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "x-portkey-api-key": portkey_key,
+        "Content-Type": "application/json"
+    }
     prompt = "Please read and transcribe all text in this image. Return only the transcribed text, nothing else."
     
     num_samples = len(test_images)
@@ -371,35 +378,30 @@ def _run_evaluation_with_checkpointing(
             pil_image.save(buf, format="PNG")
             image_data = base64.b64encode(buf.getvalue()).decode()
             
-            # Build native Gemini REST payload with logprobs enabled
+            # Build OpenAI-compatible payload for Portkey (logprobs disabled)
             payload = {
-                "contents": [
+                "model": MODEL_ID,
+                "messages": [
                     {
-                        "parts": [
-                            {"text": prompt},
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
                             {
-                                "inlineData": {
-                                    "mimeType": "image/png",
-                                    "data": image_data
-                                }
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_data}"}
                             }
                         ]
                     }
                 ],
-                "generationConfig": {
-                    "maxOutputTokens": 1024,
-                    "responseLogprobs": True,
-                    "logprobs": top_logprobs
-                }
+                "max_tokens": 1024
             }
             
-            # Call Google Gemini API directly
+            # Call Portkey API
             start_time = time.time()
             response = requests.post(
-                api_url,
+                PORTKEY_API_URL,
                 json=payload,
                 headers=headers,
-                params={"key": google_api_key},
                 timeout=60
             )
             inference_time = time.time() - start_time
@@ -410,10 +412,9 @@ def _run_evaluation_with_checkpointing(
                 log_warning(MODEL_NAME, "Rate limited (429), waiting 60s before retry...")
                 time.sleep(60)
                 response = requests.post(
-                    api_url,
+                    PORTKEY_API_URL,
                     json=payload,
                     headers=headers,
-                    params={"key": google_api_key},
                     timeout=60
                 )
                 inference_time = time.time() - start_time
@@ -432,38 +433,22 @@ def _run_evaluation_with_checkpointing(
                 if parts:
                     predicted_text = parts[0].get("text", "").strip()
             
-            # Extract logprobs from response
-            logprobs_data = _extract_logprobs_from_response(response_data)
-            
-            # Calculate mean logprob and confidence
-            mean_logprob = None
-            confidence = None
-            if logprobs_data:
-                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
-                if logprob_values:
-                    mean_logprob = sum(logprob_values) / len(logprob_values)
-                    confidence = math.exp(mean_logprob) * 100
-            
-            # Calculate metrics
+            # Calculate metrics (semantic error disabled - logprobs not supported)
             cer = character_error_rate(ground_truth, predicted_text)
             wer = word_error_rate(ground_truth, predicted_text)
-            semantic_metrics = get_semantic_error(
-                logprobs_data, ground_truth, predicted_text,
-                tokenizer_model=tokenizer_model
-            )
             
             result["predicted_text"] = predicted_text
             result["cer"] = cer
             result["wer"] = wer
             result["inference_time"] = inference_time
-            result["logprobs"] = logprobs_data
-            result["mean_logprob"] = mean_logprob
-            result["confidence"] = confidence
-            result["semantic_error"] = semantic_metrics.get("semantic_error")
-            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
-            result["entropy"] = semantic_metrics.get("entropy")
-            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
-            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            result["logprobs"] = None
+            result["mean_logprob"] = None
+            result["confidence"] = None
+            result["semantic_error"] = None
+            result["kl_divergence"] = None
+            result["entropy"] = None
+            result["mean_gt_rank"] = None
+            result["top5_accuracy"] = None
             
             # Update completed indices and save checkpoint incrementally
             completed_indices.add(original_idx)
@@ -537,7 +522,7 @@ async def _process_single_image(
             pil_image.save(buf, format="PNG")
             image_data = base64.b64encode(buf.getvalue()).decode()
             
-            # Build native Gemini REST payload with logprobs enabled
+            # Build native Gemini REST payload (logprobs disabled - not supported)
             payload = {
                 "contents": [
                     {
@@ -553,9 +538,7 @@ async def _process_single_image(
                     }
                 ],
                 "generationConfig": {
-                    "maxOutputTokens": 1024,
-                    "responseLogprobs": True,
-                    "logprobs": top_logprobs
+                    "maxOutputTokens": 1024
                 }
             }
             
@@ -583,38 +566,22 @@ async def _process_single_image(
                 if parts:
                     predicted_text = parts[0].get("text", "").strip()
             
-            # Extract logprobs from response
-            logprobs_data = _extract_logprobs_from_response(response_data)
-            
-            # Calculate mean logprob and confidence
-            mean_logprob = None
-            confidence = None
-            if logprobs_data:
-                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
-                if logprob_values:
-                    mean_logprob = sum(logprob_values) / len(logprob_values)
-                    confidence = math.exp(mean_logprob) * 100
-            
-            # Calculate metrics
+            # Calculate metrics (semantic error disabled - logprobs not supported)
             cer = character_error_rate(ground_truth, predicted_text)
             wer = word_error_rate(ground_truth, predicted_text)
-            semantic_metrics = get_semantic_error(
-                logprobs_data, ground_truth, predicted_text, 
-                tokenizer_model=tokenizer_model
-            )
             
             result["predicted_text"] = predicted_text
             result["cer"] = cer
             result["wer"] = wer
             result["inference_time"] = inference_time
-            result["logprobs"] = logprobs_data
-            result["mean_logprob"] = mean_logprob
-            result["confidence"] = confidence
-            result["semantic_error"] = semantic_metrics.get("semantic_error")
-            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
-            result["entropy"] = semantic_metrics.get("entropy")
-            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
-            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            result["logprobs"] = None
+            result["mean_logprob"] = None
+            result["confidence"] = None
+            result["semantic_error"] = None
+            result["kl_divergence"] = None
+            result["entropy"] = None
+            result["mean_gt_rank"] = None
+            result["top5_accuracy"] = None
             
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
@@ -735,7 +702,7 @@ def _run_evaluation_sync(google_api_key: str, test_images: List, test_labels: Li
             pil_image.save(buf, format="PNG")
             image_data = base64.b64encode(buf.getvalue()).decode()
             
-            # Build native Gemini REST payload with logprobs enabled
+            # Build native Gemini REST payload (logprobs disabled - not supported)
             payload = {
                 "contents": [
                     {
@@ -751,9 +718,7 @@ def _run_evaluation_sync(google_api_key: str, test_images: List, test_labels: Li
                     }
                 ],
                 "generationConfig": {
-                    "maxOutputTokens": 1024,
-                    "responseLogprobs": True,
-                    "logprobs": top_logprobs
+                    "maxOutputTokens": 1024
                 }
             }
             
@@ -773,47 +738,28 @@ def _run_evaluation_sync(google_api_key: str, test_images: List, test_labels: Li
             
             response_data = response.json()
             
-            # Extract text response from native Gemini format
-            # Structure: candidates[0].content.parts[0].text
+            # Extract text response from OpenAI-compatible format (Portkey)
+            # Structure: choices[0].message.content
             predicted_text = ""
-            candidates = response_data.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    predicted_text = parts[0].get("text", "").strip()
+            if response_data.get("choices") and len(response_data["choices"]) > 0:
+                predicted_text = response_data["choices"][0].get("message", {}).get("content", "").strip()
             
-            # Extract logprobs from response
-            logprobs_data = _extract_logprobs_from_response(response_data)
-            
-            # Calculate mean logprob and confidence
-            mean_logprob = None
-            confidence = None
-            if logprobs_data:
-                logprob_values = [t["logprob"] for t in logprobs_data if t.get("logprob") is not None]
-                if logprob_values:
-                    mean_logprob = sum(logprob_values) / len(logprob_values)
-                    confidence = math.exp(mean_logprob) * 100
-            
-            # Calculate metrics
+            # Calculate metrics (semantic error disabled - logprobs not supported)
             cer = character_error_rate(ground_truth, predicted_text)
             wer = word_error_rate(ground_truth, predicted_text)
-            semantic_metrics = get_semantic_error(
-                logprobs_data, ground_truth, predicted_text, 
-                tokenizer_model=tokenizer_model
-            )
             
             result["predicted_text"] = predicted_text
             result["cer"] = cer
             result["wer"] = wer
             result["inference_time"] = inference_time
-            result["logprobs"] = logprobs_data
-            result["mean_logprob"] = mean_logprob
-            result["confidence"] = confidence
-            result["semantic_error"] = semantic_metrics.get("semantic_error")
-            result["kl_divergence"] = semantic_metrics.get("kl_divergence")
-            result["entropy"] = semantic_metrics.get("entropy")
-            result["mean_gt_rank"] = semantic_metrics.get("mean_gt_rank")
-            result["top5_accuracy"] = semantic_metrics.get("top5_accuracy")
+            result["logprobs"] = None
+            result["mean_logprob"] = None
+            result["confidence"] = None
+            result["semantic_error"] = None
+            result["kl_divergence"] = None
+            result["entropy"] = None
+            result["mean_gt_rank"] = None
+            result["top5_accuracy"] = None
         
         except Exception as e:
             log_warning(MODEL_NAME, f"Error processing sample {idx}: {str(e)}")
@@ -841,11 +787,6 @@ def _aggregate_metrics(results: List[Dict[str, Any]], num_samples: int) -> Dict[
     cer_values = []
     wer_values = []
     inference_times = []
-    semantic_errors = []
-    kl_divergences = []
-    entropies = []
-    mean_gt_ranks = []
-    top5_accuracies = []
     num_errors = 0
     
     for r in results:
@@ -858,16 +799,6 @@ def _aggregate_metrics(results: List[Dict[str, Any]], num_samples: int) -> Dict[
                 wer_values.append(r["wer"])
             if r.get("inference_time") is not None:
                 inference_times.append(r["inference_time"])
-            if r.get("semantic_error") is not None:
-                semantic_errors.append(r["semantic_error"])
-            if r.get("kl_divergence") is not None:
-                kl_divergences.append(r["kl_divergence"])
-            if r.get("entropy") is not None:
-                entropies.append(r["entropy"])
-            if r.get("mean_gt_rank") is not None:
-                mean_gt_ranks.append(r["mean_gt_rank"])
-            if r.get("top5_accuracy") is not None:
-                top5_accuracies.append(r["top5_accuracy"])
     
     metrics = {
         "num_samples": num_samples,
@@ -899,17 +830,6 @@ def _aggregate_metrics(results: List[Dict[str, Any]], num_samples: int) -> Dict[
     else:
         metrics["mean_inference_time"] = None
         metrics["total_inference_time"] = None
-    
-    if semantic_errors:
-        metrics["mean_semantic_error"] = sum(semantic_errors) / len(semantic_errors)
-    if kl_divergences:
-        metrics["mean_kl_divergence"] = sum(kl_divergences) / len(kl_divergences)
-    if entropies:
-        metrics["mean_entropy"] = sum(entropies) / len(entropies)
-    if mean_gt_ranks:
-        metrics["mean_gt_rank"] = sum(mean_gt_ranks) / len(mean_gt_ranks)
-    if top5_accuracies:
-        metrics["mean_top5_accuracy"] = sum(top5_accuracies) / len(top5_accuracies)
     
     return metrics
 
