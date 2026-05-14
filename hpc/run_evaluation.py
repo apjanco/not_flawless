@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import evaluators
-from evaluators import (
+from churro_evaluators import (
     tesseract_eval,
     paddleocr_eval,
     easyocr_eval,
@@ -111,7 +111,7 @@ def main():
         # Uncomment as evaluator scripts are implemented
         #(tesseract_eval, "Tesseract"),
         #(kraken_eval, "Kraken"),
-        (qwen_eval, "Qwen2-VL-8B"),
+        (qwen_eval, "Qwen3-VL-8B-Instruct-churro"),
         #(deepseek_eval, "DeepSeek-OCR"),
         #(chandra_eval, "Chandra"),
     ]
