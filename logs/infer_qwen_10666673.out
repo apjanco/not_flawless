@@ -1,0 +1,7 @@
+Host: della-l02g9
+SLURM_JOB_ID: 10666673
+GPUs: 0
+NVIDIA A100 80GB PCIe, 81920 MiB
+Loading dataset (test split)...
+  1170 examples
+Loading processor for Qwen/Qwen2.5-VL-3B-Instruct...

@@ -1,0 +1,170 @@
+`trust_remote_code` is not supported anymore.
+Please check that the Hugging Face dataset 'stanford-oval/churro-dataset' isn't based on a loading script and remove `trust_remote_code`.
+If the dataset is based on a loading script, please ask the dataset author to remove it and convert it to a standard format like Parquet.
+Using the latest cached version of the dataset since stanford-oval/churro-dataset couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'default' at /scratch/gpfs/MM4/apjanco/.cache/huggingface/datasets/stanford-oval___churro-dataset/default/0.0.0/cbeaba69179d5de122fbbc9e97b2a7d97942f688 (last modified on Sat Jul  4 08:40:46 2026).
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+(EngineCore pid=2202960) /home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/executor/uniproc_executor.py:73: UserWarning: Failed to get the IP address, using 0.0.0.0 by default. The value can be set by the environment variable VLLM_HOST_IP or HOST_IP.
+(EngineCore pid=2202960)   distributed_init_method = get_distributed_init_method(get_ip(), get_open_port())
+(EngineCore pid=2202960) Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+(EngineCore pid=2202960) Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:04<00:04,  4.94s/it]
+(EngineCore pid=2202960) Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:07<00:00,  3.51s/it]
+(EngineCore pid=2202960) Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:07<00:00,  3.73s/it]
+(EngineCore pid=2202960) 
+(EngineCore pid=2202960) Process EngineCore:
+(EngineCore pid=2202960) Traceback (most recent call last):
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/jit/cpp_ext.py", line 368, in run_ninja
+(EngineCore pid=2202960)     subprocess.run(
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/subprocess.py", line 571, in run
+(EngineCore pid=2202960)     raise CalledProcessError(retcode, process.args,
+(EngineCore pid=2202960) subprocess.CalledProcessError: Command '['ninja', '-v', '-C', '/home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling', '-f', '/home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/build.ninja', '-j', '4']' returned non-zero exit status 1.
+(EngineCore pid=2202960) 
+(EngineCore pid=2202960) The above exception was the direct cause of the following exception:
+(EngineCore pid=2202960) 
+(EngineCore pid=2202960) Traceback (most recent call last):
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+(EngineCore pid=2202960)     self.run()
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/multiprocessing/process.py", line 108, in run
+(EngineCore pid=2202960)     self._target(*self._args, **self._kwargs)
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 1235, in run_engine_core
+(EngineCore pid=2202960)     raise e
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 1200, in run_engine_core
+(EngineCore pid=2202960)     engine_core = EngineCoreProc(*args, engine_index=dp_rank, **kwargs)
+(EngineCore pid=2202960)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(EngineCore pid=2202960)     return func(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 966, in __init__
+(EngineCore pid=2202960)     super().__init__(
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 133, in __init__
+(EngineCore pid=2202960)     kv_cache_config = self._initialize_kv_caches(vllm_config)
+(EngineCore pid=2202960)                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(EngineCore pid=2202960)     return func(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 283, in _initialize_kv_caches
+(EngineCore pid=2202960)     available_gpu_memory = self.model_executor.determine_available_memory()
+(EngineCore pid=2202960)                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/executor/abstract.py", line 147, in determine_available_memory
+(EngineCore pid=2202960)     return self.collective_rpc("determine_available_memory")
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/executor/uniproc_executor.py", line 92, in collective_rpc
+(EngineCore pid=2202960)     result = run_method(self.driver_worker, method, args, kwargs)
+(EngineCore pid=2202960)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/serial_utils.py", line 510, in run_method
+(EngineCore pid=2202960)     return func(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+(EngineCore pid=2202960)     return func(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/worker/gpu_worker.py", line 438, in determine_available_memory
+(EngineCore pid=2202960)     self.model_runner.profile_run()
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/worker/gpu_model_runner.py", line 6306, in profile_run
+(EngineCore pid=2202960)     output = self._dummy_sampler_run(last_hidden_states)
+(EngineCore pid=2202960)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+(EngineCore pid=2202960)     return func(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/worker/gpu_model_runner.py", line 6118, in _dummy_sampler_run
+(EngineCore pid=2202960)     raise e
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/worker/gpu_model_runner.py", line 6086, in _dummy_sampler_run
+(EngineCore pid=2202960)     sampler_output = self.sampler(
+(EngineCore pid=2202960)                      ^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+(EngineCore pid=2202960)     return self._call_impl(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+(EngineCore pid=2202960)     return forward_call(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/sample/sampler.py", line 102, in forward
+(EngineCore pid=2202960)     sampled, processed_logprobs = self.sample(logits, sampling_metadata)
+(EngineCore pid=2202960)                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/sample/sampler.py", line 286, in sample
+(EngineCore pid=2202960)     random_sampled, processed_logprobs = self.topk_topp_sampler(
+(EngineCore pid=2202960)                                          ^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+(EngineCore pid=2202960)     return self._call_impl(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+(EngineCore pid=2202960)     return forward_call(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/sample/ops/topk_topp_sampler.py", line 174, in forward_cuda
+(EngineCore pid=2202960)     return flashinfer_sample(logits.contiguous(), k, p, generators), None
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/sample/ops/topk_topp_sampler.py", line 504, in flashinfer_sample
+(EngineCore pid=2202960)     next_token_ids = flashinfer.sampling.top_k_top_p_sampling_from_logits(
+(EngineCore pid=2202960)                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/api_logging.py", line 2333, in _auto_dump_wrapper
+(EngineCore pid=2202960)     return _inner(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/sampling.py", line 1414, in top_k_top_p_sampling_from_logits
+(EngineCore pid=2202960)     masked_logits = top_k_mask_logits(logits, top_k)
+(EngineCore pid=2202960)                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/api_logging.py", line 2333, in _auto_dump_wrapper
+(EngineCore pid=2202960)     return _inner(*args, **kwargs)
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/sampling.py", line 1820, in top_k_mask_logits
+(EngineCore pid=2202960)     return get_sampling_module().top_k_mask_logits(
+(EngineCore pid=2202960)            ^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/sampling.py", line 68, in get_sampling_module
+(EngineCore pid=2202960)     module = gen_sampling_module().build_and_load()
+(EngineCore pid=2202960)              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/jit/core.py", line 316, in build_and_load
+(EngineCore pid=2202960)     self.build(verbose, need_lock=False)
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/jit/core.py", line 302, in build
+(EngineCore pid=2202960)     run_ninja(self.build_dir, self.ninja_path, verbose)
+(EngineCore pid=2202960)   File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/flashinfer/jit/cpp_ext.py", line 380, in run_ninja
+(EngineCore pid=2202960)     raise RuntimeError(msg) from e
+(EngineCore pid=2202960) RuntimeError: Ninja build failed. Ninja output:
+(EngineCore pid=2202960) ninja: Entering directory `/home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling'
+(EngineCore pid=2202960) [1/4]  /usr/local/cuda-12.9/bin/nvcc --generate-dependencies-with-compile -MF /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_sampling.cuda.o.d -DPy_LIMITED_API=0x03090000 -D_GLIBCXX_USE_CXX11_ABI=1 -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/cub -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/libcudacxx/include -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/thrust -isystem /home/aj7878/.conda/envs/churro_exp/include/python3.11 -isystem /usr/local/cuda-12.9/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/tools/util/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/spdlog/include --compiler-options=-fPIC --expt-relaxed-constexpr -static-global-template-stub=false -gencode=arch=compute_80,code=sm_80 -DFLASHINFER_ENABLE_FP8_E8M0 -DFLASHINFER_ENABLE_FP4_E2M1 -std=c++17 --threads=1 -use_fast_math -Xfatbin=-compress-all -DFLASHINFER_ENABLE_F16 -DFLASHINFER_ENABLE_BF16 -DFLASHINFER_ENABLE_FP8_E4M3 -DFLASHINFER_ENABLE_FP8_E5M2 -DNDEBUG -O3 -c /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/sampling.cu -o /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_sampling.cuda.o 
+(EngineCore pid=2202960) FAILED: [code=1] /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_sampling.cuda.o 
+(EngineCore pid=2202960)  /usr/local/cuda-12.9/bin/nvcc --generate-dependencies-with-compile -MF /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_sampling.cuda.o.d -DPy_LIMITED_API=0x03090000 -D_GLIBCXX_USE_CXX11_ABI=1 -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/cub -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/libcudacxx/include -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/thrust -isystem /home/aj7878/.conda/envs/churro_exp/include/python3.11 -isystem /usr/local/cuda-12.9/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/tools/util/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/spdlog/include --compiler-options=-fPIC --expt-relaxed-constexpr -static-global-template-stub=false -gencode=arch=compute_80,code=sm_80 -DFLASHINFER_ENABLE_FP8_E8M0 -DFLASHINFER_ENABLE_FP4_E2M1 -std=c++17 --threads=1 -use_fast_math -Xfatbin=-compress-all -DFLASHINFER_ENABLE_F16 -DFLASHINFER_ENABLE_BF16 -DFLASHINFER_ENABLE_FP8_E4M3 -DFLASHINFER_ENABLE_FP8_E5M2 -DNDEBUG -O3 -c /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/sampling.cu -o /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_sampling.cuda.o 
+(EngineCore pid=2202960) In file included from /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/sampling.cu:16:
+(EngineCore pid=2202960) /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include/flashinfer/sampling.cuh:20:10: fatal error: curand.h: No such file or directory
+(EngineCore pid=2202960)    20 | #include <curand.h>
+(EngineCore pid=2202960)       |          ^~~~~~~~~~
+(EngineCore pid=2202960) compilation terminated.
+(EngineCore pid=2202960) [2/4]  /usr/local/cuda-12.9/bin/nvcc --generate-dependencies-with-compile -MF /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_renorm.cuda.o.d -DPy_LIMITED_API=0x03090000 -D_GLIBCXX_USE_CXX11_ABI=1 -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/cub -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/libcudacxx/include -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/thrust -isystem /home/aj7878/.conda/envs/churro_exp/include/python3.11 -isystem /usr/local/cuda-12.9/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/tools/util/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/spdlog/include --compiler-options=-fPIC --expt-relaxed-constexpr -static-global-template-stub=false -gencode=arch=compute_80,code=sm_80 -DFLASHINFER_ENABLE_FP8_E8M0 -DFLASHINFER_ENABLE_FP4_E2M1 -std=c++17 --threads=1 -use_fast_math -Xfatbin=-compress-all -DFLASHINFER_ENABLE_F16 -DFLASHINFER_ENABLE_BF16 -DFLASHINFER_ENABLE_FP8_E4M3 -DFLASHINFER_ENABLE_FP8_E5M2 -DNDEBUG -O3 -c /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/renorm.cu -o /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_renorm.cuda.o 
+(EngineCore pid=2202960) FAILED: [code=1] /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_renorm.cuda.o 
+(EngineCore pid=2202960)  /usr/local/cuda-12.9/bin/nvcc --generate-dependencies-with-compile -MF /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_renorm.cuda.o.d -DPy_LIMITED_API=0x03090000 -D_GLIBCXX_USE_CXX11_ABI=1 -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/cub -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/libcudacxx/include -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/thrust -isystem /home/aj7878/.conda/envs/churro_exp/include/python3.11 -isystem /usr/local/cuda-12.9/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/tools/util/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/spdlog/include --compiler-options=-fPIC --expt-relaxed-constexpr -static-global-template-stub=false -gencode=arch=compute_80,code=sm_80 -DFLASHINFER_ENABLE_FP8_E8M0 -DFLASHINFER_ENABLE_FP4_E2M1 -std=c++17 --threads=1 -use_fast_math -Xfatbin=-compress-all -DFLASHINFER_ENABLE_F16 -DFLASHINFER_ENABLE_BF16 -DFLASHINFER_ENABLE_FP8_E4M3 -DFLASHINFER_ENABLE_FP8_E5M2 -DNDEBUG -O3 -c /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/renorm.cu -o /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_renorm.cuda.o 
+(EngineCore pid=2202960) In file included from /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/renorm.cu:17:
+(EngineCore pid=2202960) /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include/flashinfer/sampling.cuh:20:10: fatal error: curand.h: No such file or directory
+(EngineCore pid=2202960)    20 | #include <curand.h>
+(EngineCore pid=2202960)       |          ^~~~~~~~~~
+(EngineCore pid=2202960) compilation terminated.
+(EngineCore pid=2202960) [3/4]  /usr/local/cuda-12.9/bin/nvcc --generate-dependencies-with-compile -MF /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_flashinfer_sampling_binding.cuda.o.d -DPy_LIMITED_API=0x03090000 -D_GLIBCXX_USE_CXX11_ABI=1 -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/cub -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/libcudacxx/include -I/scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cccl/thrust -isystem /home/aj7878/.conda/envs/churro_exp/include/python3.11 -isystem /usr/local/cuda-12.9/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/tvm_ffi/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/cutlass/tools/util/include -isystem /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/spdlog/include --compiler-options=-fPIC --expt-relaxed-constexpr -static-global-template-stub=false -gencode=arch=compute_80,code=sm_80 -DFLASHINFER_ENABLE_FP8_E8M0 -DFLASHINFER_ENABLE_FP4_E2M1 -std=c++17 --threads=1 -use_fast_math -Xfatbin=-compress-all -DFLASHINFER_ENABLE_F16 -DFLASHINFER_ENABLE_BF16 -DFLASHINFER_ENABLE_FP8_E4M3 -DFLASHINFER_ENABLE_FP8_E5M2 -DNDEBUG -O3 -c /scratch/gpfs/MM4/.conda-aj7878/envs/churro_exp/lib/python3.11/site-packages/flashinfer/data/csrc/flashinfer_sampling_binding.cu -o /home/aj7878/.cache/flashinfer/0.6.12/80/cached_ops/sampling/csrc_flashinfer_sampling_binding.cuda.o 
+(EngineCore pid=2202960) ninja: build stopped: subcommand failed.
+(EngineCore pid=2202960) 
+Traceback (most recent call last):
+  File "/scratch/gpfs/MM4/apjanco/not_flawless/src/infer.py", line 200, in <module>
+    main()
+  File "/scratch/gpfs/MM4/apjanco/not_flawless/src/infer.py", line 127, in main
+    llm = LLM(
+          ^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/entrypoints/llm.py", line 349, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 179, in from_engine_args
+    return cls(
+           ^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 105, in __init__
+    self.engine_core = EngineCoreClient.make_client(
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 103, in make_client
+    return SyncMPClient(vllm_config, executor_class, log_stats)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 786, in __init__
+    super().__init__(
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 573, in __init__
+    with launch_core_engines(
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 1213, in launch_core_engines
+    wait_for_engine_startup(
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 1272, in wait_for_engine_startup
+    raise RuntimeError(
+RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}

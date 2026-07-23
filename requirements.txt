@@ -1,0 +1,15 @@
+# requirements.txt
+# torch, torchvision, and vllm are installed separately in 00_setup.sh
+# with pinned CUDA-variant versions to avoid pip resolver backtracking.
+
+transformers
+accelerate
+datasets
+jiwer
+tqdm
+pillow
+matplotlib
+seaborn
+pandas
+numpy
+misnomer[model,multilingual] @ git+https://github.com/apjanco/misnomer.git

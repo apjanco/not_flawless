@@ -1,0 +1,7 @@
+Host: della-l02g4
+SLURM_JOB_ID: 10666667
+GPUs: 0
+NVIDIA A100 80GB PCIe, 81920 MiB
+Loading dataset (test split)...
+  1170 examples
+Loading processor for stanford-oval/churro-3B...

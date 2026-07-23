@@ -1,0 +1,80 @@
+\documentclass{article}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{float}
+\geometry{margin=1in}
+
+\begin{document}
+
+\section*{Churro Fine-Tuning Evaluation: Coverage and Semantic Error Rate}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figures/01_coverage_by_language.png}
+  \caption{Page coverage by language---fraction of the GT page each model transcribed.
+    Churro's fine-tuning introduces a truncation tendency, most pronounced for
+    CJK scripts and several European languages.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figures/03_semantic_error_by_language.png}
+  \caption{Semantic error rate by language (errors per GT word, aligned scoring).
+    Metrics are computed against the GT region each model actually covered,
+    so this reflects transcription quality independent of coverage.}
+\end{figure}
+
+\section*{Semantic Errors per GT Word: Qwen vs.\ Churro}
+
+$\Delta = \text{Churro} - \text{Qwen}$ (negative = fine-tuning reduced errors).
+Mean $\Delta = -0.1395$; the final column shows
+how each language deviates from that average shift.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Language & Qwen & Churro & $\Delta$ & $\Delta - \bar{\Delta}$ \\
+\midrule
+    Turkish & 0.6462 & 0.2021 & -0.4441 & -0.3046 \\
+    Persian & 0.4862 & 0.1643 & -0.3219 & -0.1825 \\
+    Greek & 0.5070 & 0.2084 & -0.2985 & -0.1591 \\
+    Norwegian & 0.4059 & 0.1148 & -0.2911 & -0.1517 \\
+    Arabic & 0.5203 & 0.2334 & -0.2869 & -0.1474 \\
+    Romanian & 0.4690 & 0.1897 & -0.2793 & -0.1399 \\
+    Italian & 0.2747 & 0.0760 & -0.1987 & -0.0592 \\
+    Portuguese & 0.2818 & 0.1026 & -0.1792 & -0.0398 \\
+    Hebrew & 0.5211 & 0.3481 & -0.1731 & -0.0336 \\
+    Dutch & 0.2312 & 0.0635 & -0.1677 & -0.0282 \\
+    German & 0.2822 & 0.1216 & -0.1607 & -0.0212 \\
+    French & 0.2113 & 0.0549 & -0.1564 & -0.0170 \\
+    Hindi & 0.2067 & 0.0518 & -0.1549 & -0.0155 \\
+    Finnish & 0.2912 & 0.1401 & -0.1511 & -0.0116 \\
+    Spanish & 0.2655 & 0.1155 & -0.1500 & -0.0106 \\
+    Swedish & 0.2619 & 0.1174 & -0.1445 & -0.0050 \\
+    Latin & 0.2359 & 0.1096 & -0.1264 & +0.0131 \\
+    Bangla & 0.1831 & 0.0670 & -0.1161 & +0.0233 \\
+    Sanskrit & 0.2302 & 0.1161 & -0.1141 & +0.0253 \\
+    Bulgarian & 0.1571 & 0.0448 & -0.1123 & +0.0271 \\
+    Catalan & 0.1753 & 0.0721 & -0.1032 & +0.0363 \\
+    Slovenian & 0.1237 & 0.0284 & -0.0953 & +0.0441 \\
+    Czech & 0.1218 & 0.0423 & -0.0795 & +0.0599 \\
+    Polish & 0.1792 & 0.1000 & -0.0792 & +0.0603 \\
+    Chinese & 0.1108 & 0.0348 & -0.0760 & +0.0634 \\
+    English & 0.1181 & 0.0557 & -0.0624 & +0.0771 \\
+    Vietnamese & 0.1069 & 0.0557 & -0.0512 & +0.0882 \\
+    Japanese & 0.0879 & 0.0430 & -0.0449 & +0.0946 \\
+    Khmer & 0.1329 & 0.7075 & +0.5746 & +0.7140 \\
+\midrule
+    \textbf{Mean} & 0.2698 & 0.1304 & -0.1395 & --- \\
+\bottomrule
+\end{tabular}
+\caption{Semantic error rate (errors/GT word) by language, sorted by $\Delta$.
+  $\Delta < 0$ indicates fine-tuning reduced semantic errors;
+  $\Delta - \bar{\Delta} < 0$ indicates the language improved more than average.}
+\end{table}
+
+\end{document}

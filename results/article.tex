@@ -1,0 +1,515 @@
+% THIS IS A LATEX TEMPLATE FILE FOR PAPERS INCLUDED IN THE
+% *Anthology of Computers and the Humanities*. ADD THE OPTION
+% 'final' WHEN CREATING THE FINAL VERSION OF THE PAPER. 
+% DO NOT change the documentclass
+%\documentclass[final]{anthology-ch} % for the final version
+\documentclass{anthology-ch}         % for the submission
+
+% LOAD LaTeX PACKAGES
+\usepackage{booktabs}
+\usepackage{graphicx}
+% ADD your own packages using \usepackage{}
+
+% TITLE OF THE SUBMISSION
+% Change this to the name of your submission
+\title{Not flawless, but good enough: Vision-language models and the invisible errors of machine transcription}
+
+% AUTHOR AND AFFILIATION INFORMATION
+% For each author, include a new call to the \author command, with
+% the numbers in brackets indicating the associated affiliations 
+% (next section) and ORCID-ID for each author.  
+\author[1,2]{Author One}[
+  orcid=0000-0000-0000-0000
+]
+
+\author[1]{Author Two}[
+  orcid=0000-0002-8872-9474
+]
+
+% While we encourage including ORCID-IDs for all authors, you can
+% include authors that do not have one by definining an empty ID.
+\author[2]{Author Three}[
+  orcid=
+]
+
+% There should be one call to \affiliation for each affiliation of
+% the authors. Multiple affiliations can be given to each author
+% and an affiliation can be given to multiple authors. 
+\affiliation{1}{Some Department, Some University, Some City, Some Country}
+\affiliation{2}{Another Department, Another University, Another City, Another Country}
+
+% KEYWORDS
+% Provide one or more keywords or key phrases seperated by commas
+% using the following command
+\keywords[eng]{computers, humanities proceedings}
+
+% METADATA FOR THE PUBLICATION
+% This will be filled in when the document is published; the values can
+% be kept as their defaults when the file is submitted
+\pubyear{2025}
+\pubvolume{1}
+\pagestart{1}
+\pageend{1}
+\paperorder{1}
+\conferencename{Proceedings of Conference XXX}
+\conferenceeditors{Editor1 Editor2}
+\doi{00000/00000}  
+\customhead{}  
+
+\addbibresource{references.bib}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% HERE IS THE START OF THE TEXT
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We argue that VLM-based transcription introduces a new form of automation bias in textual heritage work: because its errors are often fluent, idiomatic, and semantically plausible, they can feel more trustworthy than older OCR errors even when they are less faithful to the source document.
+
+- Semantic paraphasia a language disorder where a person unintentionally substitutes a target word with another word that has a similar meaning or is in the same category.
+\end{abstract}
+
+
+\section{A Baskett Full of Errors}
+
+In 1717 John Baskett, the King's printer, published at Oxford a folio Bible of great splendor. Arthur Charlett, watching it through the press promised ``a most Magnificent English Bible,'' with a few copies on vellum for the Queen, and reported that the corrector's celebrated eye was engaged on refinements of spacing and letter-form ``invisible to vulgar Eys'' \cite[p.~195]{simpson_proof-reading_1935}. That care was spent on the appearance of the page, not on the accuracy of its text. In the headline above the chapter of Luke in which Jesus tells the parable of the vineyard, the book reads ``The parable of the vinegar,'' one misprint among many \cite[nos.~942--943]{herbert_historical_1968} (Figure~\ref{fig:fig1_vinegar}). Among historians of the English Bible, the edition holds a double reputation: superb as printing and, as text, a ``Baskett-ful of errors'' \cite[pp.~101--102]{norton_textual_2005}. Collectors came to call it the Vinegar Bible, the name under which copies have since been cataloged, sold, and exhibited.
+
+\begin{figure}[h!]
+   \centering
+   \includegraphics[width=\linewidth]{fig1_vinegar_3x3.pdf}
+   \caption{(1) Detail of the 1717 Vinegar Bible, whose heading to Luke~20 reads ``The parable of the vinegar.'' (2--4) Diplomatic transcriptions produced by three vision-language models; (5--6) transcriptions produced by Tesseract and Kraken. Departures from the page are marked in red. The outputs range from conspicuous glyph and segmentation errors to fluent but unsupported readings, including the replacement of \emph{vinegar} by \emph{vineyard}. William H. Scheide Library, Princeton University Library, 72.1. Photograph by the authors.}
+   \label{fig:fig1_vinegar}
+ \end{figure}
+
+The Vinegar Bible offers more than a memorable, intriguing example of early modern error. It brings into view a problem that has become newly important with a new generation of automatic transcription systems: an error may now take the form of a fluent and plausible correction. We photographed the headline and asked several current vision-language models (VLMs) for a diplomatic transcription, spelling, capitalization, and punctuation exactly as printed. Figure~\ref{fig:fig1_vinegar} gives a first look at the results, transcriptions of the same photograph by three VLMs, each departing from the text in its own way (\S\ref{sec:experiments} reports the full experiment). From the clear image, most reproduced \emph{vinegar}; gpt-5.5, in the transcription shown, returned \emph{vineyard}. The substitution captures, in one word, how the errors of automatic text recognition (ATR) are changing in character. \emph{Vinegar} is the diplomatic transcription of this page; \emph{vineyard} is the emendation an editor might introduce, and mark, in an edition. The VLM output collapses that distinction: it performs a plausible editorial correction but presents the correction as documentary evidence.
+
+The remaining outputs place this fluent correction beside more familiar transcription failures. Tesseract and Kraken preserve \emph{vinegar} but introduce local letter confusions, broken word boundaries, omissions, and garbled strings. \texttt{Llama-4-Scout}, although a VLM, behaves much like these conventional systems, repeatedly rendering long \emph{ſ} as \emph{f}. Its \emph{priefts} and \emph{faying} are visibly wrong. The two GPT outputs are smoother, but they introduce readings that are harder to
+dismiss. Both write \emph{aſk} where the page prints \emph{ask}; \texttt{gpt-5-mini} gives \emph{gaue} for \emph{gave}. Whether these forms arise from misrecognition or from a model imposing what it expects eighteenth-century biblical English to look like, the documentary result is the same: the transcription records evidence that the page does not contain. Like \emph{gaue}, \emph{priefts} and \emph{faying} introduce letters absent from the source. But whereas \emph{gaue} can pass as a plausible historical spelling, \emph{priefts} and \emph{faying} visibly announce themselves as transcription errors.
+
+This article takes that difference in error profiles as its starting point. VLMs do not replace familiar ATR failures such as omissions, glyph confusions, and broken word boundaries; they retain those possibilities while adding errors whose fluency can conceal their departure from the page. We call one such failure \emph{smooth substitution}: the unmarked replacement of an attested reading by a well-formed, contextually plausible alternative. Smooth substitutions are difficult to detect because, unlike \emph{priefts} or \emph{faying}, they may pass lexical checks, fluency-based screens, and rapid human review. They may also be directional, drawing unusual spellings, names, numbers, or phrases toward forms the model considers more probable---whether modernized, standardized, or merely more convincingly historical. Existing error rates count these differences but do not distinguish conspicuous corruption from a plausible alteration of the documentary record. We therefore develop a taxonomy of VLM transcription failures organized by their detectability and evidentiary consequences; introduce \texttt{Misnomer}, a diagnostic framework for identifying such failures; compare several VLMs with conventional ATR baselines; and test how the resulting errors behave under common quality-assurance procedures. We conclude with recommendations for evaluating and documenting VLM-derived transcriptions in cultural heritage research.
+
+Directly beneath the misprinted headline in the parable, the chief priests ask: \emph{By what authority doeſt thou theſe things?} The question is apt for VLM transcription. When a model returns a fluent reading that the page does not support, what gives that reading its authority---and how can a user tell whether the system has transcribed the document or reconstructed it?
+
+\section{A new kind of transcription}\label{sec:new_kind}
+
+To know when a model has departed from the page it copies, one first has to know \emph{how} the new models read, and \emph{why} they are replacing their predecessors. For two decades, automatic transcription in the heritage sector meant dedicated recognition systems, trained per script or per collection and embedded in infrastructures such as Transkribus \cite{muehlberger_transforming_2019, nockels_understanding_2022}. The current wave is different in kind. General-purpose vision-language models are being developed for OCR, document parsing, and historical text recognition \cite{wei_general_2024, poznanski_olmocr_2025, cui_paddleocr-vl_2025, semnani_churro_2025}; benchmark studies report that, on historical documents in several languages, such models now outperform the dedicated systems themselves \cite{humphries_unlocking_2025, crosilla_benchmarking_2025}; and the surrounding discourse has begun to describe handwritten text recognition as solved, at ``expert human levels of performance'' \cite{humphries_gemini_2025}. Adoption, in short, is running ahead of evaluation.
+
+The established systems read in stages. A conventional OCR or HTR engine segments the page into lines, recognizes character shapes or line images with a trained classifier, and decodes the result, often with the help of a lexicon, character statistics, or a language model \cite{smith_research_2018}. In that lineage, linguistic knowledge is a separable component with a bounded role: it rescores what the recognizer proposes; it does not compose the text. More recent neural recognizers narrow the distance: TrOCR pairs a pretrained image encoder with a pretrained text decoder and already writes its transcription as a sequence of wordpieces \cite{li_trocr_2022}, though the decoder is then trained to the task, and the language it carries is an aid to decoding rather than a store of expectations about what pages say. When the visual evidence fails, systems of this family degrade toward noise, the non-words and glyph confusions of Figure~\ref{fig:fig1_vinegar}~(5), the ``dirty OCR'' whose costs digital scholarship has learned to measure and to work around \cite{traub_impact_2015, alpert-abrams_machine_2016, cordell_q_2017, hill_quantifying_2019}.
+
+The change a VLM brings is therefore not from character recognition to language-aware recognition, but in the breadth of the language brought to bear. A vision encoder feeds a large language model trained on web-scale text \cite{liu_visual_2023}, and the transcription is produced token by token, each choice conditioned on the image and on learned distributions over likely continuations. Fluency is not a by-product of this arrangement but its objective: linguistic expectation is no longer a stage applied to a reading, it is the medium in which the reading is composed. Where the signal is clear and the wording common, the two sources of evidence agree, and the results can be excellent. Where the signal weakens or the wording is rare, the prior increasingly governs the prediction. Historical collections sit disproportionately in that second condition: their spelling predates standardization, their names and numbers are unfamiliar, and their most studied features are precisely the ones a modern prior finds improbable.
+
+Evaluation has not moved with the architecture. Transcription quality is still reported as character and word error rates \cite{neudecker_survey_2021}, edit-distance measures \cite{levenshtein_binary_1966} that price substitutions by the keystroke: \emph{rn}$\rightarrow$\emph{m}, an obvious glyph confusion, costs two edits, and \emph{vinegar}$\rightarrow$\emph{vineyard} costs the same two. For classical OCR this pricing was reasonable: its errors were noise, visible and roughly interchangeable, so counting them was a fair measure of the damage. The same arithmetic misleads for a system whose characteristic error is a real word in a plausible sentence. A rising error rate still signals trouble, but a falling one no longer certifies fidelity, because the errors that survive are precisely those that read like correct transcription and can only be caught by comparing the output against the image.
+
+The field of automatic speech recognition (ASR) faced this evaluation problem first. In 2003, its researchers were asking whether word error rate predicts understanding at all \cite{wang_is_2003}. A transcript that drops a filler word, an ``uh'' or a ``like,'' takes a full penalty on its error rate even though the meaning survives. A transcript that drops a ``not,'' or hears ``sell'' as ``buy,'' pays about the same penalty and reverses what the speaker meant. Newer systems sharpened the problem. Older recognizers matched sounds to words and used a language model only to rank candidate readings; today's speech models generate the transcript directly, as a language model generates any text, and their errors come out fluent: confident, well-formed transcripts of things nobody said \cite{koudounas_hallucination_2025}. The field's answer was to measure meaning, scoring a hypothesis by how far it drifts from the sense of the utterance \cite{kim_semantic_2021}. Documentary transcription needs a different measure. A metric of meaning has no use for the difference between \emph{gaue} and \emph{gave}, and it can say of \emph{vineyard} for \emph{vinegar} only that two related words were exchanged, nothing about which of them the page prints or what hangs on that.
+
+Our taxonomy therefore asks two questions about each failure. Can the error be recognized from the transcription itself? And if the reading is accepted, what documentary evidence has been lost, altered, or invented? The next section organizes the observed failure modes by these two properties: their detectability and their evidentiary consequence.
+
+\section{A taxonomy of fluent failure}\label{sec:taxonomy}
+
+The five machine transcriptions in Figure~\ref{fig:fig1_vinegar} contain, between them, most of the error types that automatic transcription can produce. This section sorts them into a taxonomy of six kinds of error, several of which are new, becasue they depend on the language capabilities that VLMs bring to the task. About each kind we ask two questions. Can the error be recognized from the transcription alone, by a spelling check, a rule, a stated convention, or does recognizing it require comparison with the image? And if the error goes unrecognized, what happens to the documentary evidence: is something lost, altered, or invented? The first question decides how much verification a reading needs; the second, what is at stake when that verification does not happen. We define the six
+kinds below. The experiments in \S\ref{sec:experiments} then measure how often each occurs across systems and material.
+
+\begin{enumerate}
+    \item The most familiar kind is \emph{garble}: output that is not a word, or that breaks and joins words across their boundaries. \emph{Priefts} and \emph{faying} in Figure~\ref{fig:fig1_vinegar} belong here, as do most of errors that Tesseract generated. This is the error class digital scholarship knows as ``dirty OCR'', whose costs for search and analysis have been measured at length \cite{traub_impact_2015, hill_quantifying_2019}. Every system in our comparison below produces garble, and conventional engines produce little else when the image defeats them. Its redeeming property is that it is self-announcing: a spelling check flags it, a reader stumbles over it, and the stumble prompts exactly the verification the passage needs.
+    
+    \item \emph{Silent normalization} changes the spelling of words without changing their semantics. In Figure~\ref{fig:fig1_vinegar}, Kraken renders each long~\emph{ſ} as \emph{s}. Editors know the layer being rewritten as the `accidentals' of a text, usually arbitrary, frequently altered by printers, typesetters, or scribes during production rather than by the author \cite{greg_rationale_1950}. An edition that regularizes spelling is said to normalize silently, with the difference that the edition states its policy in the front matter. How much policy a transcription system states varies sharply between the two families. The Kraken model in Figure~\ref{fig:fig1_vinegar} is distributed via Zenodo with a description of its transcription convention \cite{gabay_catmus-print_2024}, and its model file lists its complete output alphabet: 220 characters, among which \emph{ſ} does not appear. Every long~\emph{ſ} it reads must therefore surface as some other character. Both facts, and the discrepancy between them, can be verified, because the inventory is inspectable and the convention is published. A VLM publishes neither. Its tokenizer operates on bytes, so any Unicode string is a possible transcription \cite{kudo_sentencepiece_2018, radford_language_2019}, and the convention it applies is whichever spelling its training data made most probable (stated nowhere). A normalization can only be detected against a declared convention, and only one of the two families provides a declaration.
+
+    \item \emph{Fake authenticity} runs in the opposite direction: the model makes the text look older than the page. The GPT models write \emph{aſk} where the type reads \emph{ask}, and \emph{gaue} where it reads \emph{gave}. Linguists call this pattern hypercorrection, the over-application of a register a writer is imitating; here the register is age. Producing it requires an idea of what period text should look like. Conventional recognizers have no such idea, and for the Kraken model discussed above the direction is closed outright, since \emph{ſ} is absent from its alphabet; in our runs, fake authenticity appears only in VLM output. Taken together with silent normalization, it also corrects a tempting simplification. The prior does not pull the text toward the present; it pulls toward whatever the model expects, and on an eighteenth-century page it expects old spelling. The cost falls on scholarship that reads spelling as evidence. Studies that date or localize documents by their orthography, and histories of spelling change, would take \emph{gaue} at face value. A fabricated archaism, once transcribed and published, can also enter the training data of later models, where it counts as an attested period form.
+
+    \item \emph{Entity smoothing} replaces proper names and rare terms with more familiar ones. Names invite this failure more than any other part of a text. They form an open class, so no dictionary can vouch for them, and they are among the least frequent words on any page, so the model's expectations give them the least support. The two system families fail differently here. A conventional engine mangles an unfamiliar name into garble, which is visible. A VLM replaces it, sometimes with a different well-formed name, sometimes with a common word. Medical speech recognition has documented the same class and built entity-level metrics for it, because a transcript can score well overall while getting exactly the clinically decisive terms wrong \cite{afonja_performant_2024}. In historical collections the stakes are retrieval and identity: a smoothed name cannot be searched for, linked to an authority record, or counted. The names most exposed to this problem are often also the rarest, and rare names belong disproportionately to the people and places that archives document least.
+    
+    
+\end{enumerate}
+
+
+\section{From OCR accuracy to semantic faithfulness}
+
+CER and WER are necessary, but insufficient: CER and WER are the inherited infrastructure; but they currently miss the problem that VLM-aided transcription introduces. Maybe here AJ's result: Qwen3-VL 8B CER and WER correlate fairly strongly, but CER / WER vs. semantic error correlates weakly.
+
+
+
+===============
+
+
+\subsection{Towards Semantic Error Detection in Vision--Language Models}
+
+We define a semantic error as a class of machine errors in Automatic Text Recognition (ATR) in which the model transcribes text that is linguistically plausible but unfaithful to the source image because visual evidence is overridden by the language priors of a pre-trained language model. Unlike classical recognition errors, which stem from degraded, ambiguous, or out-of-distribution visual signals, semantic errors occur even when the decoder emits what is probable under its learned language distribution rather than what is actually written. Because these priors are intrinsic to the generative language-modeling objective on which such systems are built, semantic errors are not incidental artifacts but a systematic consequence of using a generative language model for transcription. 
+
+
+Our method measures semantic error in the output of any vision--language model (VLM) by comparing a
+predicted transcription against a ground-truth transcription of the same
+document image. The central design choice is a \emph{model-agnostic} scoring pipeline.
+Given that some models expose their internal language model and others do not,
+we decided to score only the outputs. 
+
+All scoring is performed by a fixed, versioned set of internal models that are
+independent of the transcription system. This makes scores reproducible and
+comparable across systems, collections, and institutions, and it lets a single
+scorer audit output from a local VLM, a remote API, or a classical OCR engine
+on equal terms.
+
+\subsection{Word alignment}
+
+Predicted and ground-truth strings are first tokenized into words. When a
+transformer tokenizer is available, subword tokens are grouped into words using
+their character offsets---robust across byte-level BPE (Qwen2.5, GPT-2),
+SentencePiece, and WordPiece tokenizers---after which leading and trailing
+punctuation is stripped and punctuation-only tokens are discarded. The two word
+sequences are aligned by minimum edit distance using the same dynamic-program
+that underlies word error rate (WER); matching is case-insensitive. The
+alignment labels each position as a \textsc{match}, \textsc{substitution},
+\textsc{insertion}, or \textsc{deletion}. Only substitutions can carry a
+semantic error, so only substituted word pairs receive a composite error score;
+insertions, deletions, and matches are scored zero and instead feed the
+aggregate rate statistics described below.
+
+\subsection{Two signals}
+
+Each substituted pair---a predicted word $\hat{w}$ aligned to a ground-truth
+word $w^{*}$---is characterized by two independent signals.
+
+\paragraph{Signal 1: contextual surprisal of the correct word.}
+Using the internal language model, we compute how surprising the ground-truth
+word $w^{*}$ is given its surrounding ground-truth context. This is the standard
+per-word perplexity, but computed over a single forward pass of the ground-truth
+text. A high value means the correct word was contextually unlikely. This is
+exactly the condition under which a semantic substitution is most tempting and
+most damaging: where the page says "vinegar," but the model has learned "vineyard" during training. 
+Low surprisal on the correct word marks positions where the true text
+is already the expected text and little is at stake.
+
+To obtain a stable per-word value we use only the \emph{first} subword token of
+each word's span. Continuation tokens within a multi-token word are conditioned
+on the word having already started; they are near-certain predictions whose
+log-probabilities are close to zero and would, if averaged in, systematically
+deflate the perplexity of longer words. The first token is the one the model
+predicts purely from context, so it carries the genuine surprisal signal. Raw
+perplexity is mapped to $[0,1]$ on an absolute log scale with a fixed ceiling of
+$\exp(13.8)\approx 10^{6}$, rather than by per-document minimum--maximum
+scaling. The absolute scale preserves a meaningful value for documents
+containing only a single substitution (where relative normalization would
+collapse to a constant) and keeps scores comparable across documents of
+different lengths.
+
+\paragraph{Signal 2: semantic proximity of the substitution.}
+Using a fixed internal sentence-transformer, we measure how close in meaning the
+predicted word is to the correct word. Each word is embedded and the two
+embeddings are compared by cosine similarity, so a near-synonym yields a high
+similarity and an unrelated word a low one. Because bare single-word inputs
+produce unreliable embeddings each word is first
+wrapped in a minimal sentence frame, ``\texttt{A \{word\}.}'', before encoding.
+
+The counterintuitive but essential point is that \emph{high} similarity marks
+the dangerous case. A substitution that means almost the same thing as the
+original reads naturally and survives human review; a substitution that means
+something unrelated is caught on sight. We therefore use this signal both to
+grade severity and to classify the substitution: pairs with similarity at or
+above a threshold (default $0.35$ for frame-encoded word similarity with the
+default embedder) are labeled \textsc{semantic} errors---the plausible,
+review-surviving class this work targets---and pairs below the threshold are
+labeled \textsc{obvious} errors, the self-evident mistakes that classical
+metrics already surface.
+
+\subsection{Composite word score}
+
+The two signals are combined into a single severity score per substituted pair:
+%
+\begin{equation}
+    s_i \;=\; w_{\mathrm{ppl}}\cdot \tilde{p}(w^{*}_i \mid \mathbf{c}_i)
+            \;+\; w_{\mathrm{sem}}\cdot \mathrm{sim}(\hat{w}_i,\, w^{*}_i),
+    \label{eq:composite}
+\end{equation}
+%
+where $\tilde{p}\in[0,1]$ is the log-scale-normalized perplexity of the correct
+word in context (Signal 1), $\mathrm{sim}\in[0,1]$ is the cosine similarity
+between the predicted and correct word embeddings (Signal 2), and the score is
+clipped to $[0,1]$. The default weights are $w_{\mathrm{ppl}}=0.4$ and
+$w_{\mathrm{sem}}=0.6$, placing slightly more emphasis on semantic proximity, on
+the argument that a plausible-meaning substitution is the more consequential
+failure. A high $s_i$ therefore identifies the most dangerous substitutions:
+those that are semantically close to the truth \emph{and} occur where the
+correct word was contextually surprising---replacements that read more smoothly
+than the source document itself and are the most likely to pass unnoticed
+through careful human review.
+
+
+\section{Failure modes}
+
+Distributional/smooth substitution: a token is replaced by another that is plausible at the surface level but does not match the visual ground truth. 
+
+Hypothesis, caused by learned distributions and entropy control of the underlying LLM, connected to the uncertainty of the prediction ("best guess" given the context), error is more likely with less frequent terms?   
+
+High-distribution substitution: a token is replaced by another that is more probable given the model's learned distributions. May result in the modern normalization of informal, regional, and period texts. 
+
+
+
+taxonomy of these: a.o.: refusal, boilerplate text, empyt response, hallucination, continuation (can be desired), smooth substitution ... others?
+
+taxonomy + signals
+
+evaluate frequency of semantic errors against established 
+
+\texttt{Misnomer}, a humanities-facing evaluation tool
+possible forms of signal
+experiment with perplexity as a proxy of error -- 
+
+\subsection{Experiment 1 - Vinegar Bible}
+
+\subsection{Experiment 2 - IAM}
+Experiment 2 evaluates semantic error on the \href{https://huggingface.co/datasets/Teklia/IAM-line}{IAM handwriting corpus}. Each row in our evaluation outputs corresponds to one IAM line image paired with its ground-truth transcription. Given that the handwritten examples are in English and the IAM dataset is likely part of a model's training data, the presence of semantic errors suggests that this type of error is inherent in the Transformer architecture. For each model, we predict the handwritten text using a consistent prompt.  
+
+
+\begin{table}[h]
+\centering
+\caption{Semantic errors are common across all evaluated VLM OCR systems.}
+\label{tab:semantic-errors-common}
+\begin{tabular}{lrrrr}
+\hline
+Model & IAM Lines & Lines with $\geq 1$ semantic error & Percent (\%) & Max errors/line \\
+\hline
+ChatGPT-5              & 10,411 & 1,310 & 12.6 & 4 \\
+Claude Opus 4.6          & 10,373 & 1,530 & 14.8 & 5 \\
+Gemini 3.0       & 10,458 & 1,438 & 13.8 & 10 \\
+Qwen3-VL-8B-Instruct   & 10,373 & 2,136 & 20.6 & 5 \\
+Chandra                & 10,373 & 2,297 & 22.1 & 5 \\
+ChatGPT-4o             & 10,373 & 2,647 & 25.5 & 7 \\
+\hline
+All VLM systems (pooled) & 62,361 & 11,358 & 18.2 & 10 \\
+\hline
+\end{tabular}
+\end{table}
+The pattern is consistent across all evaluated VLM systems: semantic errors are not edge cases but a regular machine-error mode. Depending on model, 12.6\% to 25.5\% of IAM lines contain at least one semantic error, with a pooled rate of 18.2\% (11,358 of 62,361 VLM line outputs). In other words, roughly one in five VLM transcriptions in this experiment carries meaning-level risk despite remaining fluent and readable.Taken together, the IAM results support our central claim: semantic error is a distinct and measurable VLM transcription failure type that is only partially captured by conventional surface-form metrics such as CER and WER.
+
+
+\subsection{Experiment 3 - Donkeys}
+
+\subsection{Experiment 4 - Churro}
+
+So far, we have investigated semantic error in English-language documents.
+For computational humanities scholars, materials are often in multiple languages and scripts.
+To get some bearing on how semantic error varies across languages, scripts and historical text, we identified the  Churro dataset from Stanford OVAL as a suitable testbed.
+
+Stanford OVAL's Churro 3B is a continued-pretraining of
+Qwen2.5-VL-3B-Instruct trained specifically to transcribe historical
+documents; the \texttt{churro-dataset} test split on which we evaluate spans
+29 language clusters and a comparable range of scripts, from Latin and
+Cyrillic to Han, Devanagari, and Khmer. This combination makes Churro an
+unusually direct testbed for two questions the taxonomy raises but cannot
+answer from a single example: does training a model explicitly on
+historical, multilingual transcription reduce fluent, plausible-but-unfaithful
+readings, or does it simply relocate them; and is any such effect uniform, or
+does it depend on how well a given language or script is represented in the
+fine-tuning data? We compare Churro 3B against its own un-fine-tuned base
+model, Qwen2.5-VL-3B-Instruct, on identical pages, so that every difference
+we report below is attributable to Stanford's fine-tuning recipe specifically,
+and not to a change in model architecture or scale.
+
+We compute our semantic error score alongside CER and WER, the metrics
+reported for Churro in the original paper, over
+the same aligned ground-truth region so that both families of metrics
+describe the same transcribed text. The two disagree more often than they
+agree. Standard edit-distance metrics are, first, poorly behaved on several
+of the scripts in the test set: because CER and WER are unbounded when a
+prediction runs longer than its reference, character error rates exceed
+1,000\% for Chinese, Japanese, Sanskrit, and Khmer, figures that describe a
+numerical blow-up rather than a level of transcription quality. Second, and
+more consequentially, low CER does not imply semantic fidelity: 318 pages in
+our combined evaluation (13.6\%) have a CER under 10\% yet more than five
+semantic errors each, split almost evenly between the base and fine-tuned
+models. These are transcriptions a CER-only evaluation would certify as
+successful while nonetheless containing the class of fluent, meaning-altering
+substitution this paper is concerned with, and fine-tuning does not change the
+rate at which this occurs---whatever Stanford's recipe optimizes for, it is
+not the gap between surface accuracy and semantic faithfulness.
+
+Considered on its own terms, the Churro fine-tuning does reduce semantic
+error substantially: averaged over all 29 languages, the semantic error rate
+falls from 0.270 to 0.130 errors per ground-truth word
+(Table~\ref{tab:churro-delta}), roughly a halving. But the average obscures
+more than it reveals. The improvement ranges from a near-halving of semantic
+error in Turkish and Persian to negligible effects in languages such as
+English, and it is entangled with a second, less visible shift: the
+fine-tuned model transcribes less of the page. Page coverage---the fraction
+of the ground-truth text a model actually attempts---falls for 28 of the 29
+languages under fine-tuning (Figure~\ref{fig:churro-coverage}), by as much as
+49 points for Italian. Part of Churro's apparent gain in semantic fidelity is
+therefore a gain in caution: transcribing a shorter, more confident span of
+the page rather than the same span more faithfully. A fine-tuning result
+reported as a single aggregate error rate can, in other words, be a coverage
+effect in disguise.
+
+Khmer is the one language in the test set where this pattern inverts, and it
+is worth a brief note because the reversal is qualitative rather than
+marginal. The base model does not produce Khmer script for these pages at
+all; it hallucinates fluently, repeating Chinese text unrelated to the source ("吾辈之信条乃曰" "our creed is" repeated hundreds of times),
+consistent with Khmer's negligible presence in its pretraining data.
+Churro's fine-tuning does teach the model to emit genuine Khmer script, but
+on the same pages the fine-tuned model falls into a repetition loop,
+generating a short Khmer phrase ("ស្ដេច សុខ", roughly "the king is happy") far past the length of the source page. The
+result inflates edit-distance error, and our semantic error count together,
+and it inflates measured coverage as well, since a length-based coverage
+heuristic cannot distinguish a longer correct transcription from a longer
+degenerate one. Khmer therefore looks, in the aggregate tables, like
+fine-tuning's single failure case; read against the actual output, it is
+better described as a real capability gain---the model now attempts the
+correct script---compromised by a decoding failure that our metrics,
+semantic and traditional alike, register only as a much worse number.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\linewidth]{01_coverage_by_language.png}
+  \caption{Page coverage by language---the fraction of the ground-truth page
+    each model transcribed. Stanford OVAL's fine-tuning lowers coverage for
+    nearly every language; Khmer is the sole exception, for reasons discussed
+    in the text.}
+  \label{fig:churro-coverage}
+\end{figure}
+
+\begin{table}[h]
+  \centering
+  \caption{Semantic errors per ground-truth word, base model vs.\ Churro 3B,
+    for representative languages. $\Delta = \text{Churro} - \text{Qwen}$;
+    negative values indicate fine-tuning reduced semantic error. Full
+    per-language results appear in the project repository.}
+  \label{tab:churro-delta}
+  \begin{tabular}{lrrr}
+    \toprule
+    Language & Qwen 2.5-VL-3B & Churro 3B & $\Delta$ \\
+    \midrule
+    Turkish  & 0.646 & 0.202 & $-0.444$ \\
+    Persian  & 0.486 & 0.164 & $-0.322$ \\
+    Greek    & 0.507 & 0.208 & $-0.299$ \\
+    English  & 0.118 & 0.056 & $-0.062$ \\
+    Khmer    & 0.133 & 0.708 & $+0.575$ \\
+    \midrule
+    \textbf{Mean (29 languages)} & \textbf{0.270} & \textbf{0.130} & \textbf{$-0.140$} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\section{``Good enough for what?'' Guidelines for LIS and humanities}
+
+errors will continue to exist - neede is a way to recognize it, quantify it, ten if needed correct it - but what -- 
+
+
+\section{Future directions}
+The present framework requires a verified ground-truth transcription against which the predicted text is aligned. Alignment is performed at the word level using edit-distance-based sequence alignment analogous to WER computation, producing matched word pairs for scoring. This requirement limits applicability to collections for which ground truth exists; a constraint that is not trivial for large-scale archival digitisation projects, where verified transcriptions may cover only a small sample of holdings.
+
+A reference-free extension is methodologically feasible and represents a natural direction for future development. In this mode, the researcher would compute the marginal log-probability of each predicted token in context, equivalent to a per-token perplexity decomposition, without comparison to any reference. Tokens to which the scorer assigns anomalously low probability given their context would be surfaced as candidates for review. This approach would enable preliminary screening of unverified transcriptions, supporting triage and prioritisation of manual correction efforts in large-scale digitisation workflows. It cannot, however, distinguish between a genuinely erroneous token and a rare but correct one, nor can it quantify semantic distance from the correct form. The reference-free mode thus trades precision for coverage, and is most appropriately understood as a complementary screening tool rather than a replacement for reference-based evaluation.
+
+
+Wouter: 
+- smoothness bias; connect to congition, interface of the conversational agent; transkribus interface, not knowing wht model is being used -- 
+- faithfullness -
+- reviled/revived example
+- literature review: ASR; other papers on transcirption -- 
+
+Andy:
+work on Failure modes 
+run misnomer on large collections? 
+*must have an evaluation step if using VLMs (arc of the paper), think of archive
+review description of our method
+Transkribus interface issue, 
+line between traditional OCR tool and VLM, 
+add to failure mode: interpretation/perspective
+
+CFP deadline: August 14 AoE
+
+\printbibliography
+
+\end{document}
+
+
+
+
+% WH: below goes all the boilerplate template info, for reference
+
+% \section{Introduction} 
+
+% Here is an example of the first section of the paper. All standard LaTeX
+% formatting commands work as expected, such as \textit{italic},
+% \textbf{bold}, \texttt{code}, and \textsc{small caps}. 
+
+% You may modify this file by renaming, deleting, or adding sections of
+% your own and substituting our instructional text with the text of your paper. Add
+% references to \texttt{biblography.bib} as BibTeX entries. These can then be
+% cited by using the format at the end of this
+% sentence \cite{tettoni2024discoverability}. You can also cite multiple papers
+% together using the format at the end of this sentence
+% \cite{barré2024latent, levenson2024textual, bambaci2024steps}.
+
+% \subsection{Details} \label{sec:intro_details}
+
+% You may also include subsections if they help organize your text, but they are not required. Use as many sections and subsections with whatever names work for your submission.
+
+% \section{Elements}
+
+% \subsection{Tables}
+
+% Tables can also be added to the document using the standard LaTeX table
+% format. Each table needs a unique label and caption. Below (in the source code)
+% is an example of the code to create a table, along with a brief caption.
+
+% \begin{table}[h]
+%   \centering 
+%   \begin{tabular}{cc}
+%     \toprule
+%     Column Name 1 & Column Name 2\\
+%     \midrule
+%     d1 & d2 \\
+%     d1 & d2 \\
+%     d1 & d2 \\
+%     \bottomrule
+%   \end{tabular}
+%   \caption{Example table and table caption.}
+%   \label{tab:example}
+% \end{table}
+
+% The table can be referenced as Table~\ref{tab:example}.
+
+% \subsection{Figures}
+
+% Figures can also be added to the document. As with tables, each figure needs
+% a unique label and caption. The format is shown in the lines below
+% (in the source code). Figure files themselves should be included along with the
+% submission.
+
+% \begin{figure}[t!]
+%   \centering
+%   \includegraphics[width=0.4\linewidth]{640x480.png}
+%   \caption{Example figure and figure caption.}
+%   \label{fig:example}
+% \end{figure}
+
+% A figure can be cited as Figure~\ref{fig:example}.
+
+% \subsection{Equations}
+
+% We can include mathematical notations using LaTeX mathematical formatting,
+% such as:
+% \begin{align}
+% f(y) &= x^2. \label{fig:squared}
+% \end{align}
+
+% The line number of the equation can be cited as Equation~\ref{fig:squared}.
+
+% \subsection{Other References}
+
+% Finally, you can also cite other sections or subsections of your paper using
+% the tags that you have used at the end of each of the section titles:
+% Section~\ref{sec:intro_details}.
+
+% % Print the biblography at the end. Keep this line after the main
+% % text of your paper, and before an appendix. 
+% \printbibliography
+
+% % You can include an appendix using the following command
+% \appendix
+
+% \section{First Appendix Section} \label{appdx:first}
+
+% Optional appendix sections can be included after the references section. 
+
+% \end{document}
