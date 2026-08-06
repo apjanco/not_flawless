@@ -1,0 +1,14 @@
+Host: della-l04g15
+SLURM_JOB_ID: 11573709
+GPUs: 0
+misnomer package ready
+Resuming: 283 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[50] scored=14  semantic_error_rate=50.0%  last_cer=62.0
+[100] scored=32  semantic_error_rate=75.0%  last_cer=2422.9
+[150] scored=49  semantic_error_rate=73.5%  last_cer=95.9
+[250] scored=75  semantic_error_rate=70.7%  last_cer=124.2

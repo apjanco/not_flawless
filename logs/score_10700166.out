@@ -1,0 +1,58 @@
+Host: della-l02g13
+SLURM_JOB_ID: 10700166
+GPUs: 0
+[50] scored=50  semantic_error_rate=0.0%  last_cer=100.0
+[100] scored=100  semantic_error_rate=0.0%  last_cer=100.0
+[150] scored=150  semantic_error_rate=0.0%  last_cer=100.0
+[200] scored=200  semantic_error_rate=0.0%  last_cer=100.0
+[250] scored=250  semantic_error_rate=0.0%  last_cer=100.0
+[300] scored=300  semantic_error_rate=0.0%  last_cer=100.0
+[350] scored=350  semantic_error_rate=0.0%  last_cer=100.0
+[400] scored=400  semantic_error_rate=0.0%  last_cer=100.0
+[450] scored=450  semantic_error_rate=0.0%  last_cer=100.0
+[500] scored=500  semantic_error_rate=0.0%  last_cer=100.0
+[550] scored=550  semantic_error_rate=0.0%  last_cer=100.0
+[600] scored=600  semantic_error_rate=0.0%  last_cer=100.0
+[650] scored=650  semantic_error_rate=0.0%  last_cer=100.0
+[700] scored=700  semantic_error_rate=0.0%  last_cer=100.0
+[750] scored=750  semantic_error_rate=0.0%  last_cer=100.0
+[800] scored=800  semantic_error_rate=0.0%  last_cer=100.0
+[850] scored=850  semantic_error_rate=0.0%  last_cer=100.0
+[900] scored=900  semantic_error_rate=0.0%  last_cer=100.0
+[950] scored=950  semantic_error_rate=0.0%  last_cer=100.0
+[1000] scored=1000  semantic_error_rate=0.0%  last_cer=100.0
+[1050] scored=1050  semantic_error_rate=0.0%  last_cer=100.0
+[1100] scored=1100  semantic_error_rate=0.0%  last_cer=100.0
+[1150] scored=1150  semantic_error_rate=0.0%  last_cer=100.0
+
+Finished. 1170 examples scored.
+Output: results/churro_scored.jsonl
+[50] scored=50  semantic_error_rate=0.0%  last_cer=100.0
+[100] scored=100  semantic_error_rate=0.0%  last_cer=100.0
+[150] scored=150  semantic_error_rate=0.0%  last_cer=100.0
+[200] scored=200  semantic_error_rate=0.0%  last_cer=100.0
+[250] scored=250  semantic_error_rate=0.0%  last_cer=100.0
+[300] scored=300  semantic_error_rate=0.0%  last_cer=100.0
+[350] scored=350  semantic_error_rate=0.0%  last_cer=100.0
+[400] scored=400  semantic_error_rate=0.0%  last_cer=100.0
+[450] scored=450  semantic_error_rate=0.0%  last_cer=100.0
+[500] scored=500  semantic_error_rate=0.0%  last_cer=100.0
+[550] scored=550  semantic_error_rate=0.0%  last_cer=100.0
+[600] scored=600  semantic_error_rate=0.0%  last_cer=100.0
+[650] scored=650  semantic_error_rate=0.0%  last_cer=100.0
+[700] scored=700  semantic_error_rate=0.0%  last_cer=100.0
+[750] scored=750  semantic_error_rate=0.0%  last_cer=100.0
+[800] scored=800  semantic_error_rate=0.0%  last_cer=100.0
+[850] scored=850  semantic_error_rate=0.0%  last_cer=100.0
+[900] scored=900  semantic_error_rate=0.0%  last_cer=100.0
+[950] scored=950  semantic_error_rate=0.0%  last_cer=100.0
+[1000] scored=1000  semantic_error_rate=0.0%  last_cer=100.0
+[1050] scored=1050  semantic_error_rate=0.0%  last_cer=100.0
+[1100] scored=1100  semantic_error_rate=0.0%  last_cer=100.0
+[1150] scored=1150  semantic_error_rate=0.0%  last_cer=100.0
+
+Finished. 1170 examples scored.
+Output: results/qwen_scored.jsonl
+Semantic scoring complete.
+Qwen scored:   results/qwen_scored.jsonl
+Churro scored: results/churro_scored.jsonl

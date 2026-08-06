@@ -1,0 +1,54 @@
+'[Errno -2] Name or service not known' thrown while requesting HEAD https://huggingface.co/datasets/stanford-oval/churro-dataset/resolve/cbeaba69179d5de122fbbc9e97b2a7d97942f688/churro-dataset.py
+Retrying in 1s [Retry 1/5].
+Using the latest cached version of the dataset since stanford-oval/churro-dataset couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'default' at /scratch/gpfs/MM4/apjanco/.cache/huggingface/datasets/stanford-oval___churro-dataset/default/0.0.0/cbeaba69179d5de122fbbc9e97b2a7d97942f688 (last modified on Sat Jul  4 08:40:46 2026).
+'[Errno -2] Name or service not known' thrown while requesting HEAD https://huggingface.co/stanford-oval/churro-3B/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+Traceback (most recent call last):
+  File "/scratch/gpfs/MM4/apjanco/not_flawless/src/infer.py", line 199, in <module>
+    main()
+  File "/scratch/gpfs/MM4/apjanco/not_flawless/src/infer.py", line 124, in main
+    processor = AutoProcessor.from_pretrained(args.model, trust_remote_code=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/transformers/models/auto/processing_auto.py", line 224, in from_pretrained
+    processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/transformers/utils/hub.py", line 293, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/transformers/utils/hub.py", line 527, in cached_files
+    raise e
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/transformers/utils/hub.py", line 437, in cached_files
+    hf_hub_download(
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1018, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1152, in _hf_hub_download_to_cache_dir
+    _get_metadata_or_catch_error(
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1712, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1620, in get_hf_file_metadata
+    response = _httpx_follow_relative_redirects_with_backoff(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 719, in _httpx_follow_relative_redirects_with_backoff
+    response = http_backoff(
+               ^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 596, in http_backoff
+    return next(
+           ^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 504, in _http_backoff_base
+    response = client.request(method=method, url=url, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aj7878/.conda/envs/churro_exp/lib/python3.11/site-packages/httpx/_client.py", line 901, in send
+    raise RuntimeError("Cannot send a request, as the client has been closed.")
+RuntimeError: Cannot send a request, as the client has been closed.

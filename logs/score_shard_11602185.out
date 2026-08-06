@@ -1,0 +1,40 @@
+Host: della-l02g7
+SLURM_JOB_ID: 11602185
+Shard: 0 of 4
+misnomer package ready
+Resuming: 110 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[120] scored=10  semantic_error_rate=60.0%  last_cer=8.0
+[140] scored=30  semantic_error_rate=43.3%  last_cer=731.6
+[160] scored=50  semantic_error_rate=48.0%  last_cer=64.0
+[180] scored=70  semantic_error_rate=52.9%  last_cer=38.7
+[200] scored=90  semantic_error_rate=50.0%  last_cer=39.7
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+[210] reloaded LM/embedder/dictionary
+[220] scored=110  semantic_error_rate=57.3%  last_cer=5.2
+[240] scored=130  semantic_error_rate=48.5%  last_cer=703.4
+[260] scored=150  semantic_error_rate=42.0%  last_cer=73.8
+[280] scored=170  semantic_error_rate=41.2%  last_cer=100.0
+
+Finished. 183 examples scored.
+Output: results/shards/qwen_scored_shard0of4.jsonl
+Resuming: 230 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[60] scored=15  semantic_error_rate=80.0%  last_cer=25.1
+[120] scored=31  semantic_error_rate=54.8%  last_cer=8.1
+[160] scored=44  semantic_error_rate=54.5%  last_cer=19.8
+[200] scored=52  semantic_error_rate=59.6%  last_cer=63.4
+
+Finished. 63 examples scored.
+Output: results/shards/churro_scored_shard0of4.jsonl
+Shard 0 of 4 complete.

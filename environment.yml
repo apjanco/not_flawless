@@ -1,0 +1,9 @@
+name: churro_exp
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # All pip packages are in requirements.txt and installed by 00_setup.sh
+  # to avoid conda's slow pip subprocess wrapper.

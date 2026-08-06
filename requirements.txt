@@ -1,6 +1,7 @@
 numpy
 pandas
 matplotlib
+seaborn
 opencv-python
 pillow
 scipy
@@ -13,8 +14,10 @@ pytesseract
 #pylaia
 kraken
 transformers
+accelerate
 huggingface-hub
 datasets
+jiwer
 
 # Deep Learning
 torch
@@ -27,9 +30,12 @@ google-cloud-vision
 google-genai>=1.0.0  # Official Google Gen AI SDK (google-generativeai 0.8.6 is deprecated)
 
 # Utilities
-tqdm
 pyyaml
 
 # image processing
 augraphy
 
+# Semantic error scoring (Della Churro pipeline)
+# torch, torchvision, and vllm are installed separately in 00_setup.sh
+# with pinned CUDA-variant versions to avoid pip resolver backtracking.
+misnomer[model,multilingual,gates] @ git+https://github.com/apjanco/misnomer.git

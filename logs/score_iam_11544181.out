@@ -1,0 +1,4 @@
+Host: della-l04g15
+SLURM_JOB_ID: 11544181
+Collecting misnomer @ git+https://github.com/apjanco/misnomer.git (from misnomer[gates,model,multilingual] @ git+https://github.com/apjanco/misnomer.git)
+  Cloning https://github.com/apjanco/misnomer.git to /tmp/pip-install-z7fkg84_/misnomer_34d0e25707f044d8a58cce40a0bcda15

@@ -1,0 +1,79 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:49,  2.64it/s]Loading weights:   0%|          | 1/290 [00:00<02:05,  2.31it/s]Loading weights:  63%|██████▎   | 183/290 [00:00<00:00, 452.91it/s]Loading weights:  63%|██████▎   | 183/290 [00:00<00:00, 483.58it/s]Loading weights:  96%|█████████▌| 279/290 [00:00<00:00, 478.67it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 414.61it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 477.21it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 390.13it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 4453.67it/s]
+Loading weights: 100%|██████████| 199/199 [00:00<00:00, 4539.96it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:41,  6.91it/s]Loading weights:  80%|████████  | 232/290 [00:00<00:00, 1150.63it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1010.11it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10205.62it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:46,  6.28it/s]Loading weights:  84%|████████▍ | 243/290 [00:00<00:00, 1134.04it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 986.07it/s] 
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10449.14it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:44,  6.42it/s]Loading weights:  92%|█████████▏| 267/290 [00:00<00:00, 1260.27it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1079.96it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10136.71it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:53,  5.43it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1049.87it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10483.39it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:55,  5.22it/s]Loading weights:  98%|█████████▊| 285/290 [00:00<00:00, 1215.06it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 991.69it/s] 
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 7140.43it/s]
+Loading weights:   0%|          | 1/290 [00:00<00:37,  7.80it/s]Loading weights:  77%|███████▋  | 223/290 [00:00<00:00, 1173.28it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1061.97it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10373.68it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:07,  4.28it/s]Loading weights:  88%|████████▊ | 255/290 [00:00<00:00, 954.48it/s]Loading weights:   0%|          | 1/290 [00:00<01:02,  4.64it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 796.82it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights:  90%|█████████ | 261/290 [00:00<00:00, 1032.74it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 884.34it/s] 
+Loading weights: 100%|██████████| 199/199 [00:00<00:00, 7290.75it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10556.18it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:58,  4.92it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1014.78it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10204.37it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:44,  6.50it/s]Loading weights:  88%|████████▊ | 256/290 [00:00<00:00, 1230.78it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1049.08it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 17425.19it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:48,  5.93it/s]Loading weights:   0%|          | 1/290 [00:00<00:43,  6.61it/s]Loading weights:  71%|███████▏  | 207/290 [00:00<00:00, 944.13it/s]Loading weights:  63%|██████▎   | 183/290 [00:00<00:00, 882.25it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 821.92it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 875.23it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 13872.50it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10137.94it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:10,  4.11it/s]Loading weights:  88%|████████▊ | 255/290 [00:00<00:00, 927.26it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 800.71it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 16383.04it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:45,  6.41it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1137.86it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10453.19it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:30,  9.61it/s]Loading weights:  85%|████████▌ | 247/290 [00:00<00:00, 1427.17it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1227.14it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10239.55it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  44%|████▍     | 129/290 [00:00<00:00, 1276.41it/s]Loading weights:  90%|████████▉ | 260/290 [00:00<00:00, 1295.96it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1307.16it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10276.11it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:51,  5.57it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1102.29it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10069.45it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:38,  7.43it/s]Loading weights:  84%|████████▍ | 243/290 [00:00<00:00, 1241.39it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1093.73it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10756.70it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:57,  4.99it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1102.63it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10101.86it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:46,  6.18it/s]Loading weights:  94%|█████████▍| 273/290 [00:00<00:00, 1251.72it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1074.69it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 11719.39it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:49,  5.87it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1075.25it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10811.18it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:53,  5.43it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1033.34it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 15432.21it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:37,  7.67it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  80%|███████▉  | 231/290 [00:00<00:00, 1182.74it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1047.30it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:44,  6.50it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6861.44it/s]
+Loading weights:  88%|████████▊ | 256/290 [00:00<00:00, 1204.69it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1059.71it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10098.44it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:38,  7.59it/s]Loading weights:  80%|███████▉  | 231/290 [00:00<00:00, 1150.80it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1058.92it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6001.25it/s]
+Loading weights:   0%|          | 1/290 [00:00<00:41,  6.89it/s]Loading weights:  88%|████████▊ | 255/290 [00:00<00:00, 1177.54it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1071.60it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10404.07it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  30%|███       | 88/290 [00:00<00:00, 812.30it/s]Loading weights:  76%|███████▌  | 220/290 [00:00<00:00, 1099.20it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1053.08it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6363.53it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:32,  8.91it/s]Loading weights:  84%|████████▍ | 243/290 [00:00<00:00, 1338.99it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1196.44it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10700.72it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:54,  5.34it/s]Loading weights:  67%|██████▋   | 193/290 [00:00<00:00, 790.53it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 746.91it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 5490.22it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:54,  5.34it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1077.19it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10553.24it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:49,  5.86it/s]Loading weights:  80%|████████  | 232/290 [00:00<00:00, 1053.27it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 961.16it/s] 
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:31,  9.23it/s]Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 7714.04it/s]
+Loading weights:  88%|████████▊ | 255/290 [00:00<00:00, 1366.13it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1264.01it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10729.74it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:05,  4.42it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 956.06it/s]
+Loading weights:   0%|          | 1/290 [00:00<00:37,  7.76it/s]Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 11540.66it/s]
+Loading weights:  80%|████████  | 233/290 [00:00<00:00, 1188.36it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1086.31it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10161.76it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:37,  7.71it/s]Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  72%|███████▏  | 209/290 [00:00<00:00, 1088.77it/s]Loading weights:   0%|          | 1/290 [00:00<00:40,  7.21it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 938.86it/s] 
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights:  67%|██████▋   | 195/290 [00:00<00:00, 975.40it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 5992.16it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 954.89it/s]
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10372.14it/s]
+[2026-07-05T09:05:03.253] error: *** JOB 10700490 ON della-l04g1 CANCELLED AT 2026-07-05T09:05:03 DUE to SIGNAL Terminated ***

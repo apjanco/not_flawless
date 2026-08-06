@@ -1,0 +1,16 @@
+Host: della-l02g10
+SLURM_JOB_ID: 11609503
+Shard: 3 of 4
+misnomer package ready
+Resuming: 274 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[120] scored=4  semantic_error_rate=0.0%  last_cer=68.3
+
+Finished. 18 examples scored.
+Output: results/shards/qwen_scored_shard3of4.jsonl
+Resuming: 280 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...

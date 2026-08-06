@@ -1,0 +1,6 @@
+Host: della-l04g5
+SLURM_JOB_ID: 11569608
+GPUs: 0
+misnomer package ready
+Resuming: 283 examples already scored, skipping.
+Loading misnomer models (LM + embedder)...

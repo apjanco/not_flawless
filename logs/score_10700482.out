@@ -1,0 +1,14 @@
+Host: della-l04g5
+SLURM_JOB_ID: 10700482
+GPUs: 0
+Resuming: 1170 examples already scored, skipping.
+
+Finished. 0 examples scored.
+Output: results/churro_scored.jsonl
+Resuming: 1170 examples already scored, skipping.
+
+Finished. 0 examples scored.
+Output: results/qwen_scored.jsonl
+Semantic scoring complete.
+Qwen scored:   results/qwen_scored.jsonl
+Churro scored: results/churro_scored.jsonl

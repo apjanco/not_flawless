@@ -1,0 +1,28 @@
+Host: della-l01g16
+SLURM_JOB_ID: 11660118
+misnomer package ready
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[5] scored=5  semantic_error_rate=0.0%  last_cer=48.2
+[10] scored=10  semantic_error_rate=0.0%  last_cer=74.8
+[15] scored=15  semantic_error_rate=0.0%  last_cer=76.4
+[20] scored=20  semantic_error_rate=0.0%  last_cer=141.5
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+[20] reloaded LM/embedder/dictionary
+[25] scored=25  semantic_error_rate=0.0%  last_cer=331.2
+[30] scored=30  semantic_error_rate=0.0%  last_cer=362.0
+[35] scored=35  semantic_error_rate=0.0%  last_cer=1081.4
+[40] scored=40  semantic_error_rate=0.0%  last_cer=90.2
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+[40] reloaded LM/embedder/dictionary
+[45] scored=45  semantic_error_rate=0.0%  last_cer=43.8
+[50] scored=50  semantic_error_rate=0.0%  last_cer=91.1
+[55] scored=55  semantic_error_rate=0.0%  last_cer=77.5
+[60] scored=60  semantic_error_rate=0.0%  last_cer=50.6

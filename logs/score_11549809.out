@@ -1,0 +1,39 @@
+Host: della-i14g10
+SLURM_JOB_ID: 11549809
+GPUs: 0
+misnomer package ready
+Loading misnomer models (LM + embedder)...
+Loading misnomer models (LM + embedder)...
+Resolved LM: Qwen/Qwen2.5-0.5B (device=cuda)
+Resolved embedder: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Dictionary available: True
+Models ready.
+[50] scored=50  semantic_error_rate=38.0%  last_cer=68.5
+[100] scored=100  semantic_error_rate=34.0%  last_cer=17.0
+[150] scored=150  semantic_error_rate=40.0%  last_cer=86.6
+[200] scored=200  semantic_error_rate=47.5%  last_cer=19.4
+[250] scored=250  semantic_error_rate=48.0%  last_cer=81.3
+[300] scored=300  semantic_error_rate=44.7%  last_cer=4.9
+[350] scored=350  semantic_error_rate=42.6%  last_cer=82.7
+[400] scored=400  semantic_error_rate=42.8%  last_cer=8.4
+[450] scored=450  semantic_error_rate=38.0%  last_cer=5.5
+[500] scored=500  semantic_error_rate=35.8%  last_cer=100.0
+[550] scored=550  semantic_error_rate=33.8%  last_cer=47.7
+[600] scored=600  semantic_error_rate=31.5%  last_cer=69.5
+[650] scored=650  semantic_error_rate=31.1%  last_cer=8.7
+[700] scored=700  semantic_error_rate=30.7%  last_cer=35.5
+[750] scored=750  semantic_error_rate=29.1%  last_cer=20.2
+[800] scored=800  semantic_error_rate=31.0%  last_cer=15.6
+[850] scored=850  semantic_error_rate=32.7%  last_cer=5.7
+[900] scored=900  semantic_error_rate=31.7%  last_cer=4.6
+[950] scored=950  semantic_error_rate=30.0%  last_cer=74.8
+[1000] scored=1000  semantic_error_rate=28.9%  last_cer=62.4
+[1050] scored=1050  semantic_error_rate=28.2%  last_cer=64.7
+[1100] scored=1100  semantic_error_rate=29.1%  last_cer=68.9
+[1150] scored=1150  semantic_error_rate=27.9%  last_cer=23.9
+
+Finished. 1170 examples scored.
+Output: results/churro_scored.jsonl
+Semantic scoring complete.
+Qwen scored:   results/qwen_scored.jsonl
+Churro scored: results/churro_scored.jsonl
