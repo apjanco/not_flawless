@@ -22,6 +22,7 @@ mode and skip semantic / obvious error classification.
 """
 
 import argparse
+import gc
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -32,18 +33,63 @@ import misnomer
 from misnomer import ScorerConfig
 from misnomer.models.lm import LMScorer
 from misnomer.models.embedder import Embedder
-from misnomer.scorer import _score_with_models
+from misnomer.scorer import _build_dictionary, _score_with_models
+
+try:
+    import torch
+except ImportError:
+    torch = None
 
 # ------------------------------------------------------------------
 # misnomer scorer configuration
 # use_multilingual_embedder=True selects paraphrase-multilingual-MiniLM-L12-v2
 # which handles all 29 language clusters in the Churro test set.
+#
+# scorer_version left unset -> defaults to misnomer's current version (1.1),
+# activating the v1.1 gates (NUMERIC/allograph/GARBLE/homoglyph/segmentation),
+# which require misnomer[gates] (pyspellchecker) to be installed.
+# strict=True per the library's own guidance ("all paper/production runs
+# should set strict=True") -- surfaces a hard error instead of silently
+# degrading to the frequency-proxy LM or char-similarity embedder fallback.
+# device="cuda": LMScorer reads cfg.device directly (default "cpu" for
+# v1.0 bit-stable behavior); without this override it would ignore the GPU
+# these jobs request. Embedder auto-detects CUDA on its own.
 # ------------------------------------------------------------------
 SCORER_CONFIG = ScorerConfig(
     lm_model="Qwen/Qwen2.5-0.5B",
     use_multilingual_embedder=True,
     allow_download=True,
+    strict=True,
+    device="cuda",
 )
+
+# Map Churro's main_script column to a misnomer tradition profile. Deliberately
+# narrow: "early-modern-german-fraktur" (misnomer's data/traditions.json) is
+# evidenced directly from this dataset (the combining-e umlaut convention,
+# e.g. "Vermoͤgen" for "Vermögen") -- gated on the script variant rather than
+# main_language=="German" because not all German rows are Fraktur-set (e.g.
+# a 1943 Antiqua-typeface newspaper in the same test split shows no archaic
+# spelling at all). No profiles are declared for the other 27 languages/
+# scripts in Churro (Cyrillic, Hebrew, Greek, Arabic, Devanagari, Han, ...)
+# for lack of the same direct evidence; misnomer's own design principle is
+# that a tradition must be declared from evidence, never guessed, so those
+# rows stay on the "modern" default until someone does that evidence work.
+SCRIPT_TRADITION_MAP = {
+    "Latin (Fraktur variant)": "early-modern-german-fraktur",
+}
+
+_CONFIG_CACHE: dict[str | None, ScorerConfig] = {}
+
+
+def config_for_script(main_script: str | None) -> ScorerConfig:
+    """Return SCORER_CONFIG, or a copy with `tradition` overridden per
+    SCRIPT_TRADITION_MAP. Cached so repeated calls don't rebuild the config."""
+    tradition = SCRIPT_TRADITION_MAP.get(main_script)
+    if tradition is None:
+        return SCORER_CONFIG
+    if tradition not in _CONFIG_CACHE:
+        _CONFIG_CACHE[tradition] = SCORER_CONFIG.model_copy(update={"tradition": tradition})
+    return _CONFIG_CACHE[tradition]
 
 
 def extract_gt_text(xml_str: str) -> str:
@@ -122,7 +168,7 @@ def compute_wer(pred: str, ref: str) -> float:
     return jiwer.wer(ref, pred) * 100.0
 
 
-def score_semantic(pred: str, gt: str, lm: LMScorer, embedder: Embedder) -> dict:
+def score_semantic(pred: str, gt: str, lm: LMScorer, embedder: Embedder, dictionary, cfg: ScorerConfig) -> dict:
     """
     Run misnomer scoring.  Returns a flat dict of semantic fields ready to
     merge into the output record.  On failure, returns an error field instead.
@@ -133,7 +179,8 @@ def score_semantic(pred: str, gt: str, lm: LMScorer, embedder: Embedder) -> dict
             ground_truth=gt,
             lm=lm,
             embedder=embedder,
-            cfg=SCORER_CONFIG,
+            cfg=cfg,
+            dictionary=dictionary,
         )
         return {
             "semantic_error_count": report.semantic_error_count,
@@ -148,6 +195,15 @@ def score_semantic(pred: str, gt: str, lm: LMScorer, embedder: Embedder) -> dict
             "semantic_scorer_version": getattr(report, "scorer_version", None),
             "semantic_lm_model": getattr(report, "lm_model", None),
             "semantic_embedder_model": getattr(report, "embedder_model", None),
+            # v1.1 gate-class counts and provenance
+            "semantic_numeric_error_count": getattr(report, "numeric_error_count", None),
+            "semantic_normalization_count": getattr(report, "normalization_count", None),
+            "semantic_archaizing_count": getattr(report, "archaizing_count", None),
+            "semantic_garble_count": getattr(report, "garble_count", None),
+            "semantic_homoglyph_count": getattr(report, "homoglyph_count", None),
+            "semantic_segmentation_count": getattr(report, "segmentation_count", None),
+            "semantic_tradition": getattr(report, "tradition", None),
+            "semantic_is_refusal": getattr(report, "is_refusal", None),
         }
     except Exception as exc:
         return {
@@ -174,6 +230,16 @@ def load_done_ids(path: Path) -> set:
     return done
 
 
+def load_models(cfg: ScorerConfig):
+    lm = LMScorer(cfg)
+    embedder = Embedder(cfg)
+    dictionary = _build_dictionary(cfg)
+    print(f"Resolved LM: {lm.resolved_model_name} (device={lm.resolved_device})")
+    print(f"Resolved embedder: {embedder.resolved_model_name}")
+    print(f"Dictionary available: {dictionary.available if dictionary else 'n/a (gates inactive)'}")
+    return lm, embedder, dictionary
+
+
 def main():
     parser = argparse.ArgumentParser(description="Score predictions with CER/WER + misnomer.")
     parser.add_argument("--input",  required=True, help="Path to predictions JSONL")
@@ -181,6 +247,16 @@ def main():
     parser.add_argument(
         "--log_every", type=int, default=50,
         help="Print progress every N examples",
+    )
+    parser.add_argument(
+        "--reload_every", type=int, default=100,
+        help=(
+            "Tear down and reload the LM/embedder every N scored rows. "
+            "Full-page Churro documents run long enough that host memory "
+            "climbed to whatever --mem ceiling was set (48G, then 64G twice) "
+            "regardless of size, hard-killing the job; periodic reload keeps "
+            "memory bounded independent of the underlying cause."
+        ),
     )
     args = parser.parse_args()
 
@@ -196,12 +272,12 @@ def main():
         print(f"Resuming: {len(done_ids)} examples already scored, skipping.")
 
     print("Loading misnomer models (LM + embedder)...")
-    lm = LMScorer(SCORER_CONFIG)
-    embedder = Embedder(SCORER_CONFIG)
+    lm, embedder, dictionary = load_models(SCORER_CONFIG)
     print("Models ready.")
 
     total = 0
     n_semantic_errors = 0
+    since_reload = 0
 
     with open(in_path) as fin, open(out_path, "a") as fout:
         for i, raw_line in enumerate(fin):
@@ -229,7 +305,8 @@ def main():
 
             # --- semantic scoring (aligned) ---
             if pred and aligned_gt:
-                sem = score_semantic(pred, aligned_gt, lm, embedder)
+                row_cfg = config_for_script(rec.get("main_script"))
+                sem = score_semantic(pred, aligned_gt, lm, embedder, dictionary, row_cfg)
             else:
                 # empty prediction or ground truth → no semantic content to score
                 sem = {
@@ -244,6 +321,7 @@ def main():
             fout.flush()
 
             total += 1
+            since_reload += 1
             if rec.get("semantic_has_error"):
                 n_semantic_errors += 1
 
@@ -254,6 +332,15 @@ def main():
                     f"semantic_error_rate={rate:.1%}  "
                     f"last_cer={rec['cer']:.1f}"
                 )
+
+            if args.reload_every > 0 and since_reload >= args.reload_every:
+                del lm, embedder, dictionary
+                gc.collect()
+                if torch is not None and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                lm, embedder, dictionary = load_models(SCORER_CONFIG)
+                since_reload = 0
+                print(f"[{i + 1}] reloaded LM/embedder/dictionary")
 
     print(f"\nFinished. {total} examples scored.")
     print(f"Output: {out_path}")

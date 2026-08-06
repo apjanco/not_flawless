@@ -512,6 +512,135 @@ Both inference and scoring are long-running jobs. The scripts above append to ou
 
 ---
 
+## Known Limitations — misnomer v1.1 scoring performance (2026-07-25)
+
+Semantic scoring on Churro documents is dramatically slower under misnomer
+v1.1 than the original "3–5h" estimate below assumed, and slower than the
+same scoring step ran under misnomer's pre-v1.1 code (see below). Root
+cause, mitigation applied, and why we're not fixing the underlying issue
+right now:
+
+**Root cause**: `LMScorer.substitution_surprisals` (`misnomer/src/misnomer/models/lm.py`)
+computes a full-word, teacher-forced Δ (delta) for every word-level
+substitution between prediction and ground truth. For each substituted
+word it rebuilds the ground-truth prefix from scratch (`" ".join(ground_truth_words[:i])`)
+and runs an independent full forward pass over it — no KV-cache or hidden-state
+reuse across substitution positions within the same document. Cost is
+roughly O(substitutions × document_length) per document. This code path is
+gated by `cfg.gates_active` (`scorer_version >= "1.1"`, our default), not by
+`use_surprisal_contrast` as its docstring implies — that flag only affects
+how the *result* is used afterward, not whether the expensive computation
+runs.
+
+IAM never hit this (lines are short, tens of words). Churro documents are
+full pages (predicted-text length up to 94,840 characters), so this became
+the practical bottleneck: an isolated measurement (job 11573709, 2026-07-24,
+128G mem, no OOM) processed only **173 qwen rows in 8h05m** (≈21.4 rows/hour
+on 1 A100) — compare to a June 2026 Adroit-cluster run of an older,
+pre-v1.1 misnomer that scored 21,320+ rows in a single job. That older run
+used a different (larger) dataset and predates the v1.1 delta machinery
+entirely, so it isn't a strict apples-to-apples comparison, but it confirms
+the slowness is specific to the new per-substitution computation, not an
+inherent property of scoring long documents.
+
+Zero-shot Qwen2.5-VL-3B predictions are hit hardest: worse zero-shot
+transcription quality means more word-level substitutions per document,
+and the cost scales with substitution count. Churro-3B's predictions (fewer
+errors, shorter median length: 517 vs. 1,671 chars) score noticeably faster.
+
+**The efficient fix** (not implemented — see below) would be a single
+teacher-forced forward pass over the full ground-truth sequence per
+document, computing per-position logits once, then a cheap incremental
+lookup per substitution for the predicted word's probability at that
+position under the shared cached prefix — the same approach the pre-v1.1
+`word_perplexities` path already uses correctly. `substitution_surprisals`
+appears to have regressed away from that.
+
+**Mitigation applied**: sharded scoring across 4 parallel single-GPU SLURM
+jobs (`src/shard_prep.py`, `scripts/02b_score_semantic_shard.sh`,
+`scripts/submit_semantic_shards.sh`), splitting `qwen_predictions.jsonl`
+and `churro_predictions.jsonl` by `image_path % 4` and pre-seeding each
+shard's output from already-valid scored rows so no completed work is
+redone. This does not fix the per-row cost, only parallelizes around it.
+
+**Decision**: this is a research project — we're accepting the slow path to
+keep misnomer v1.1's gate taxonomy (`numeric_error_count`, `garble_count`,
+`homoglyph_count`, `segmentation_count`) and the `early-modern-german-fraktur`
+tradition profile for Churro, both of which require `scorer_version >= 1.1`.
+Falling back to `scorer_version="1.0"` would restore the old speed but lose
+both. Revisit the caching fix (either upstream in misnomer, or a local
+workaround) if this needs to run again at this document length.
+
+### Update (2026-07-27): precise mechanism confirmed, final coverage accepted
+
+Sharding (4 parallel jobs, `--mem=128G`) got Qwen and Churro most of the way,
+but a residual set on each side kept failing even at 128G. Bumping a
+one-off pass to `--mem=256G` (`scripts/04b_score_residual.sh`,
+`scripts/04c_score_residual_qwen.sh`) surfaced the actual error underneath
+the generic "OOM" symptom: real CUDA allocation failures, with requested
+single-tensor sizes up to **180.71 GiB on an 80GB A100**. This confirms the
+mechanism exactly: `substitution_surprisals` batches up to `chunk_size=16`
+candidates per forward pass and pads the whole batch to the *longest*
+prefix in that chunk; the resulting `logits` tensor is
+`(chunk_size × max_len × vocab_size)` in float32, and for a substitution
+positioned late in a long ground-truth document this is unbounded — no
+realistic amount of memory fixes the worst case, only avoids it for
+shorter documents.
+
+Practical result of the 256G residual passes: Churro recovered 40 of 74
+remaining documents (54%); Qwen recovered **0 of 71** (its zero-shot
+predictions are far more substitution-dense per document, so the same
+documents are more expensive to score for Qwen than for Churro-3B). Final
+coverage:
+
+| | Valid | Coverage |
+|---|---|---|
+| Qwen (zero-shot) | 1,099 / 1,170 | 93.9% |
+| Churro-3B (fine-tuned) | 1,136 / 1,170 | 97.1% |
+| **Matched pairs (both valid)** | **1,088 / 1,170** | **93.0%** |
+
+Since the project's comparison is paired (base vs. fine-tuned on the same
+document), the matched-pairs set is what matters, not either model's
+individual coverage — recorded in `results/matched_pairs_image_paths.json`
+(1,088 `image_path` values). Any Qwen-vs-Churro comparative analysis should
+restrict to this set; each model's own `*_scored.jsonl` still carries its
+full individual valid set (1,099 / 1,136) for single-model statistics.
+Accepted as final — see the decision above for why we stopped here rather
+than continuing to escalate resources.
+
+### Update (2026-07-28): root cause fixed upstream in misnomer
+
+Implemented a fix in `misnomer` (branch
+`fix/substitution-surprisals-unbounded-memory`) that replaces the per-substitution
+padded-batch recomputation with a single full-document forward pass (giving every
+position's ground-truth log-probs for free, exactly like the pre-v1.1 method) plus
+one cheap incremental KV-cache step per substitution, reusing the cached context
+from that single pass. This removes the unbounded `(chunk_size × max_len ×
+vocab_size)` allocation entirely.
+
+Benchmarked directly on `image_path=628`, one of the documents identified above
+(2,969 ground-truth words, 1,629 substitutions — Polish, previously required the
+256G residual pass):
+
+| | Result |
+|---|---|
+| Legacy (old per-substitution batching) | **OOM after 207s**, tried to allocate 18.68 GiB on top of 21.96 GiB already in use |
+| New (single-pass + incremental cache) | **41.6s, 12.29 GB peak GPU memory** |
+
+Correctness verified two ways: (1) on the first 300 words of this same document
+(103 substitutions, small enough for the legacy path to still complete), new vs.
+legacy agree to `max_diff=0.000081` with 0 mismatches; (2) misnomer's existing test
+suite passes 134/143, with all 9 remaining failures confirmed pre-existing
+(identical on the unmodified baseline via `git stash` comparison) and unrelated to
+this change. Packaged as a PR to `github.com/apjanco/misnomer`.
+
+This doesn't retroactively rescue the 82 documents (74 Churro + residual Qwen)
+dropped from the matched-pairs set above — that coverage decision is accepted as
+final and the paper's numbers are already built on it — but it means future
+scoring runs (revisions, new datasets) won't hit this ceiling.
+
+---
+
 ## Expected Timeline
 
 | Step | Wall time (estimated) | GPU needed |
@@ -519,10 +648,11 @@ Both inference and scoring are long-running jobs. The scripts above append to ou
 | 0 — Setup & model download | 1–2 h | No |
 | 1 — Qwen inference (1,170 ex) | 2–4 h | 1× A100 |
 | 1 — Churro inference (1,170 ex) | 2–4 h | 1× A100 |
-| 2 — Semantic scoring (both) | 3–5 h | 1× GPU |
+| 2 — Semantic scoring (both), pre-v1.1 misnomer | 3–5 h | 1× GPU |
+| 2 — Semantic scoring (both), misnomer v1.1 (actual, 2026-07-25) | ~35–38 GPU-hours serial-equivalent; ~9–10h wall-clock across 4 parallel shards | 4× A100 (sharded) |
 | 3 — Analysis & figures | 30 min | No |
 
-Steps 1 (Qwen) and 1 (Churro) can run in parallel if two GPU allocations are available.
+Steps 1 (Qwen) and 1 (Churro) can run in parallel if two GPU allocations are available. See "Known Limitations" above for why step 2's real cost diverged so far from the original estimate.
 
 ---
 

@@ -71,9 +71,21 @@ def word_count(text: str) -> int:
     return len(str(text).split()) if pd.notna(text) else 0
 
 
-def build_combined(qwen_path: Path, churro_path: Path) -> pd.DataFrame:
+def build_combined(qwen_path: Path, churro_path: Path, matched_pairs_path: Path | None = None) -> pd.DataFrame:
     qwen   = load_jsonl(qwen_path,   "Qwen 2.5 VL 3B")
     churro = load_jsonl(churro_path, "Churro 3B")
+
+    if matched_pairs_path is not None and matched_pairs_path.exists():
+        matched_ids = set(json.loads(matched_pairs_path.read_text()))
+        n_qwen_before, n_churro_before = len(qwen), len(churro)
+        qwen = qwen[qwen["image_path"].isin(matched_ids)]
+        churro = churro[churro["image_path"].isin(matched_ids)]
+        print(
+            f"  Restricted to {len(matched_ids)} matched pairs "
+            f"(qwen {n_qwen_before}->{len(qwen)}, churro {n_churro_before}->{len(churro)}) "
+            "so every comparison is over the same documents for both models."
+        )
+
     df = pd.concat([qwen, churro], ignore_index=True)
 
     numeric_cols = [
@@ -452,13 +464,25 @@ def main():
         "--outdir", default="results/figures",
         help="Directory for figure output (default: results/figures)",
     )
+    parser.add_argument(
+        "--matched-pairs", default="results/matched_pairs_image_paths.json",
+        help=(
+            "JSON list of image_path values valid for both models. Every figure "
+            "here is a Qwen-vs-Churro comparison, and the two models have "
+            "different (non-random) sets of documents that failed to score "
+            "under misnomer v1.1 -- restricting to this set keeps every "
+            "comparison over the same documents. Pass an empty string to "
+            "disable and use each model's full valid set."
+        ),
+    )
     args = parser.parse_args()
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
     print("Loading data...")
-    df = build_combined(Path(args.qwen), Path(args.churro))
+    matched_pairs_path = Path(args.matched_pairs) if args.matched_pairs else None
+    df = build_combined(Path(args.qwen), Path(args.churro), matched_pairs_path)
     print(f"  {len(df)} total records ({df['model'].value_counts().to_dict()})")
 
     # ── summary table ─────────────────────────────────────────────────────
